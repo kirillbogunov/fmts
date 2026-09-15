@@ -12,7 +12,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession
 from app.security import verify_password, current_user, hash_password
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.one_c import OneCClient
@@ -22,6 +22,7 @@ from app.services.ui_styles import styles_cache, badge_css, display_name, option
 from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
+from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -40,7 +41,8 @@ def ctx(request, db, **extra):
           "app_version":settings.app_version,"developer_name":settings.developer_name,
           "developer_telegram":settings.developer_telegram,"developer_url":settings.developer_url,
           "badge_style":lambda kind,code: badge_css(ui,kind,code),
-          "ui_name":lambda kind,code,fallback=None: display_name(ui,kind,code,fallback)}
+          "ui_name":lambda kind,code,fallback=None: display_name(ui,kind,code,fallback),
+          "format_duration":format_duration}
     base.update(extra); return base
 
 @router.get("/login", response_class=HTMLResponse)
@@ -144,7 +146,7 @@ def kpi_report_csv(request:Request, month:str="", db:Session=Depends(get_db)):
         "Место","Ремонтник","KPI, %","Рейтинг / 5","Заявок в работе за период",
         "Выполнено","Баллы работ","SLA вовремя, %","Закрытие, %",
         "Производительность, %","Документирование, %","Среднее время ремонта, ч",
-        "Просрочено при выполнении","Открытый хвост сейчас","Просрочено сейчас"
+        "Фактическое время работ, ч","Сеансов работы","Просрочено при выполнении","Открытый хвост сейчас","Просрочено сейчас"
     ])
     for row in report["rows"]:
         writer.writerow([
@@ -152,6 +154,7 @@ def kpi_report_csv(request:Request, month:str="", db:Session=Depends(get_db)):
             row["handled"],row["completed"],str(row["points"]).replace('.',','),str(row["sla_rate"]).replace('.',','),
             str(row["closure_rate"]).replace('.',','),str(row["productivity_rate"]).replace('.',','),
             str(row["documentation_rate"]).replace('.',','),str(row["avg_resolution_hours"]).replace('.',','),
+            str(row["tracked_hours"]).replace('.',','),row["work_sessions"],
             row["overdue_completed"],row["open_backlog"],row["overdue_open"],
         ])
     payload=('\ufeff'+out.getvalue()).encode('utf-8')
@@ -165,7 +168,8 @@ def tickets(request:Request,status:str="",q:str="",db:Session=Depends(get_db)):
     if status: query=query.filter(Ticket.status==status)
     if q: query=query.filter((Ticket.title.contains(q)) | (Ticket.number.contains(q)))
     rows=query.order_by(Ticket.id.desc()).all()
-    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,status=status,q=q,status_options=options_for(db,"status",list(STATUS_LABELS.items()))))
+    time_totals=ticket_time_totals(db,[x.id for x in rows])
+    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,status_options=options_for(db,"status",list(STATUS_LABELS.items()))))
 
 @router.get("/tickets/new", response_class=HTMLResponse)
 def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get_db)):
@@ -195,21 +199,83 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     if not user_or_login(request,db): return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if not t: return RedirectResponse("/tickets",303)
-    return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,users=db.query(User).filter(User.role.in_(["technician","dispatcher","admin"])).all(),contractors=db.query(Contractor).all(),inventory=db.query(InventoryItem).order_by(InventoryItem.name).all(),status_options=options_for(db,"status",list(STATUS_LABELS.items()))))
+    u=current_user(request,db)
+    work_time=ticket_time_summary(db,t.id)
+    active_session=next((x for x in work_time["active"] if x.user_id==u.id),None) if u else None
+    return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,work_time=work_time,active_session=active_session,can_track=bool(u and can_track_time(u,t)),users=db.query(User).filter(User.role.in_(["technician","dispatcher","admin"])).all(),contractors=db.query(Contractor).all(),inventory=db.query(InventoryItem).order_by(InventoryItem.name).all(),status_options=options_for(db,"status",list(STATUS_LABELS.items()))))
 
 @router.post("/tickets/{ticket_id}/update")
 def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),db:Session=Depends(get_db)):
     if not user_or_login(request,db): return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if t:
-        t.status=status; t.assignee_id=int(assignee_id) if assignee_id else None; t.contractor_id=int(contractor_id) if contractor_id else None; t.labor_cost=Decimal(str(labor_cost or 0)); t.master_comment=master_comment; t.master_name=t.assignee.full_name if t.assignee else t.master_name; t.updated_at=datetime.utcnow()
+        old_assignee_id=t.assignee_id
+        new_assignee_id=int(assignee_id) if assignee_id else None
+        if old_assignee_id != new_assignee_id:
+            close_active_for_ticket(db,t.id,datetime.utcnow())
+        t.status=status; t.assignee_id=new_assignee_id; t.contractor_id=int(contractor_id) if contractor_id else None; t.labor_cost=Decimal(str(labor_cost or 0)); t.master_comment=master_comment; t.updated_at=datetime.utcnow()
+        if new_assignee_id:
+            assigned_user=db.get(User,new_assignee_id)
+            if assigned_user: t.master_name=assigned_user.full_name
         if status in ("resolved","closed") and not t.resolved_at:
             t.resolved_at=datetime.utcnow()
+            close_active_for_ticket(db,t.id,t.resolved_at)
+        elif status == "cancelled":
+            close_active_for_ticket(db,t.id,datetime.utcnow())
         elif status not in ("resolved","closed") and t.resolved_at:
             # Reopened ticket: final completion time must be recalculated for SLA/KPI.
             t.resolved_at=None
         db.commit(); db.refresh(t); push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
+
+@router.post("/tickets/{ticket_id}/time/start")
+def ticket_time_start(ticket_id:int,request:Request,note:str=Form(""),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    t=db.get(Ticket,ticket_id)
+    if not t: return RedirectResponse("/tickets",303)
+    try:
+        start_work(db,t,u,note)
+    except ValueError:
+        pass
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
+
+@router.post("/tickets/{ticket_id}/time/stop")
+def ticket_time_stop(ticket_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    t=db.get(Ticket,ticket_id)
+    if t:
+        stop_work(db,t,u)
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
+
+@router.post("/tickets/{ticket_id}/time/manual")
+def ticket_time_manual(ticket_id:int,request:Request,minutes:int=Form(...),work_started_at:str=Form(""),note:str=Form(""),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    t=db.get(Ticket,ticket_id)
+    if not t or u.role not in ("technician","dispatcher","manager","admin"):
+        return RedirectResponse(f"/tickets/{ticket_id}",303)
+    if u.role=="technician" and t.assignee_id not in (None,u.id):
+        return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
+    minutes=max(1,min(int(minutes),24*60))
+    try:
+        started=datetime.fromisoformat(work_started_at) if work_started_at else datetime.utcnow()-timedelta(minutes=minutes)
+    except Exception:
+        started=datetime.utcnow()-timedelta(minutes=minutes)
+    ended=started+timedelta(minutes=minutes)
+    db.add(TicketWorkSession(ticket_id=t.id,user_id=u.id,started_at=started,ended_at=ended,duration_seconds=minutes*60,note=(note or "").strip(),source="manual"))
+    db.commit()
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
+
+@router.post("/tickets/{ticket_id}/time/{entry_id}/delete")
+def ticket_time_delete(ticket_id:int,entry_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    entry=db.get(TicketWorkSession,entry_id)
+    if entry and entry.ticket_id==ticket_id and (u.role in ("admin","dispatcher","manager") or entry.user_id==u.id):
+        db.delete(entry); db.commit()
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
 
 @router.post("/tickets/{ticket_id}/comment")
 def ticket_comment(ticket_id:int,request:Request,body:str=Form(...),db:Session=Depends(get_db)):

@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v050-kpi';
+const CACHE = 'fmts-v051-time';
 const STATIC = ['/static/app.css','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));

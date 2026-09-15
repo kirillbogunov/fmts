@@ -21,6 +21,7 @@
   <div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div>
   <div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m %H:%M') if ticket.sla_due_at else '—'}}</b></div>
   <div><span>Исполнитель</span><b>{{ticket.assignee.full_name if ticket.assignee else (ticket.master_name or 'Не назначен')}}</b></div>
+  <div class="time-summary-cell"><span>Время работ</span><b id="ticket-time-summary" data-base-seconds="{{work_time.total_seconds}}" data-running="{{'1' if active_session else '0'}}">{{work_time.total_label}}</b></div>
 </div>
 
 <div class="grid2 wide-left ticket-grid">
@@ -28,6 +29,71 @@
 <section class="panel"><h2>Описание</h2><p class="pre">{{ticket.description or 'Описание не указано'}}</p>
 <div class="facts two"><div><span>Заявитель</span><b>{{ticket.requester_name or (ticket.requester.full_name if ticket.requester else '—')}}</b></div><div><span>Телефон</span><b>{% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')}}">{{ticket.requester_phone}}</a>{% else %}—{% endif %}</b></div>{% if settings.onec_enabled %}<div><span>1С GUID</span><b>{{ticket.one_c_id or '—'}}</b></div><div><span>Синхронизация 1С</span><b>{% if ticket.onec_sync_error %}Ошибка: {{ticket.onec_sync_error}}{% elif ticket.onec_synced_at %}{{ticket.onec_synced_at.strftime('%d.%m.%Y %H:%M')}}{% else %}—{% endif %}</b></div>{% endif %}</div>
 {% if ticket.attachments %}<div class="files">{% for f in ticket.attachments %}<a href="/uploads/{{f.stored_name}}" target="_blank">📎 {{f.filename}}</a>{% endfor %}</div>{% endif %}</section>
+
+<section class="panel time-panel" id="ticket-time">
+  <div class="panelhead time-panel-head">
+    <div><h2>Учёт времени работ</h2><p class="muted">Фактическое время, которое ремонтники потратили на эту заявку.</p></div>
+    <div class="time-total"><span>ВСЕГО</span><strong id="ticket-time-total" data-base-seconds="{{work_time.total_seconds}}" data-running="{{'1' if active_session else '0'}}">{{work_time.total_label}}</strong></div>
+  </div>
+
+  {% if work_time.active %}
+  <div class="active-workers">
+    {% for entry in work_time.active %}<span class="active-worker">● {{entry.user.full_name}} сейчас работает</span>{% endfor %}
+  </div>
+  {% endif %}
+
+  {% if user.role in ['technician','dispatcher','manager','admin'] %}
+    {% if active_session %}
+      <form method="post" action="/tickets/{{ticket.id}}/time/stop" class="time-main-action">
+        <button class="btn danger time-stop-btn" type="submit">■ Остановить таймер</button>
+        <small>Счётчик идёт с {{active_session.started_at.strftime('%H:%M')}}.</small>
+      </form>
+    {% elif can_track %}
+      <form method="post" action="/tickets/{{ticket.id}}/time/start" class="time-main-action">
+        <input type="text" name="note" placeholder="Что делаете? (необязательно)" maxlength="255">
+        <button class="btn primary time-start-btn" type="submit">▶ Начать работу</button>
+        <small>Если у вас запущен таймер по другой заявке, он автоматически остановится.</small>
+      </form>
+    {% elif ticket.status in ['resolved','closed','cancelled'] %}
+      <div class="time-locked">Заявка завершена — новый таймер недоступен.</div>
+    {% else %}
+      <div class="time-locked">Таймер доступен назначенному ремонтнику, диспетчеру или руководителю.</div>
+    {% endif %}
+  {% endif %}
+
+  <div class="time-by-user">
+    {% for row in work_time.by_user %}
+      <div><span>{{row.user.full_name}}</span><b>{{format_duration(row.seconds)}}</b><small>{{row.sessions}} сеанс(а)</small></div>
+    {% else %}<p class="muted">Время по заявке ещё не фиксировалось.</p>{% endfor %}
+  </div>
+
+  {% if work_time.entries %}
+  <details class="time-history">
+    <summary>История сеансов ({{work_time.entries|length}})</summary>
+    <div class="time-entry-list">
+    {% for entry in work_time.entries %}
+      <div class="time-entry">
+        <div><b>{{entry.user.full_name}}</b><small>{{entry.started_at.strftime('%d.%m.%Y %H:%M')}} → {% if entry.ended_at %}{{entry.ended_at.strftime('%H:%M')}}{% else %}<span class="time-live-label">идёт сейчас</span>{% endif %}</small>{% if entry.note %}<p>{{entry.note}}</p>{% endif %}</div>
+        <div class="time-entry-right"><strong>{{format_duration(entry.duration_seconds) if entry.ended_at else '● идёт'}}</strong>{% if user.role in ['admin','dispatcher','manager'] or entry.user_id==user.id %}<form method="post" action="/tickets/{{ticket.id}}/time/{{entry.id}}/delete" onsubmit="return confirm('Удалить эту запись времени?')"><button type="submit" class="link-danger">Удалить</button></form>{% endif %}</div>
+      </div>
+    {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+
+  {% if user.role in ['technician','dispatcher','manager','admin'] %}
+  <details class="manual-time">
+    <summary>Добавить время вручную</summary>
+    <form method="post" action="/tickets/{{ticket.id}}/time/manual" class="form compact manual-time-form">
+      <label>Начало работы<input type="datetime-local" name="work_started_at"></label>
+      <label>Продолжительность, минут<input type="number" name="minutes" min="1" max="1440" step="1" inputmode="numeric" required placeholder="Например, 45"></label>
+      <label class="manual-note">Комментарий<input type="text" name="note" maxlength="255" placeholder="Например: диагностика холодильника"></label>
+      <button class="btn" type="submit">+ Добавить время</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
 <section class="panel" id="ticket-comments"><h2>История и комментарии</h2>{% for c in ticket.comments %}<div class="comment"><b>{{c.user.full_name if c.user else 'Система'}}</b><time>{{c.created_at.strftime('%d.%m.%Y %H:%M')}}</time><p>{{c.body}}</p></div>{% else %}<p class="muted">Комментариев пока нет.</p>{% endfor %}<form method="post" action="/tickets/{{ticket.id}}/comment" class="comment-form"><textarea name="body" rows="3" required placeholder="Комментарий по работе"></textarea><button class="btn primary">Добавить комментарий</button></form></section>
 </div>
 <div>
@@ -39,12 +105,13 @@
 <label>Стоимость работ, ₸<input type="number" step="0.01" name="labor_cost" inputmode="decimal" value="{{ticket.labor_cost}}"></label><button class="btn primary">Сохранить изменения</button></form>
 {% if settings.onec_enabled and (ticket.one_c_id or ticket.onec_sync_error) %}<form method="post" action="/api/integration/1c/push/tickets/{{ticket.id}}" style="margin-top:10px"><button class="btn">Отправить в 1С</button></form>{% endif %}</section>
 <section class="panel"><h2>ЗИП / материалы</h2><form method="post" action="/tickets/{{ticket.id}}/stock" class="form compact"><label>Позиция<select name="item_id">{% for x in inventory %}<option value="{{x.id}}">{{x.name}} — {{x.qty}} {{x.unit}}</option>{% endfor %}</select></label><label>Количество<input type="number" step="0.001" min="0.001" inputmode="decimal" name="qty" required></label><button class="btn">Списать в заявку</button></form></section>
-<section class="panel facts ticket-facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div><div><span>Затраты</span><b>{{ (ticket.labor_cost or 0) + (ticket.parts_cost or 0) }} ₸</b></div></section>
+<section class="panel facts ticket-facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div><div><span>Факт. время</span><b>{{work_time.total_label}}</b></div><div><span>Затраты</span><b>{{ (ticket.labor_cost or 0) + (ticket.parts_cost or 0) }} ₸</b></div></section>
 </div></div>
 
 <div class="ticket-action-dock" aria-label="Быстрые действия по заявке">
   {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span>🗺</span><small>Маршрут</small></button>{% else %}<button type="button" disabled><span>🗺</span><small>Нет адреса</small></button>{% endif %}
   {% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')|replace('(','')|replace(')','')|replace('-','')}}"><span>☎</span><small>Позвонить</small></a>{% else %}<a href="#ticket-control"><span>⚙</span><small>Управление</small></a>{% endif %}
+  {% if active_session %}<form method="post" action="/tickets/{{ticket.id}}/time/stop"><button type="submit" class="dock-timer active"><span>■</span><small>Стоп</small></button></form>{% elif can_track %}<form method="post" action="/tickets/{{ticket.id}}/time/start"><button type="submit" class="dock-timer"><span>▶</span><small>Время</small></button></form>{% else %}<a href="#ticket-time"><span>⏱</span><small>Время</small></a>{% endif %}
   <a href="#ticket-comments"><span>✎</span><small>Комментарий</small></a>
 </div>
 <div class="ticket-mobile-spacer"></div>
@@ -63,4 +130,14 @@
   </div>
 </div>
 </div>
+<script>
+(function(){
+  const total=document.getElementById('ticket-time-total');
+  const summary=document.getElementById('ticket-time-summary');
+  if(!total || total.dataset.running!=='1') return;
+  let seconds=parseInt(total.dataset.baseSeconds||'0',10)||0;
+  const format=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h} ч ${String(m).padStart(2,'0')} мин`:m?`${m} мин ${String(sec).padStart(2,'0')} сек`:`${sec} сек`;};
+  setInterval(()=>{seconds++; total.textContent=format(seconds); if(summary) summary.textContent=format(seconds);},1000);
+})();
+</script>
 {% endblock %}

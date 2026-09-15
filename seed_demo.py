@@ -1,7 +1,7 @@
 import secrets, os
 from datetime import date, timedelta, datetime
 from app.db import Base, engine, SessionLocal
-from app.models import User, Site, Equipment, Ticket, MaintenancePlan, InventoryItem, Contractor
+from app.models import User, Site, Equipment, Ticket, MaintenancePlan, InventoryItem, Contractor, TicketWorkSession
 from app.security import hash_password
 from app.services.maintenance import next_ticket_number
 from app.services.reference_data import ensure_default_reference_data
@@ -30,7 +30,11 @@ try:
         db.add_all(eqs); db.flush()
         db.add(MaintenancePlan(equipment_id=eqs[0].id,name="Ежемесячное ТО",interval_days=30,next_run=date.today()+timedelta(days=5),assignee_id=tech.id if tech else None,checklist='["Очистить теплообменник","Проверить температуру","Проверить вентиляторы"]'))
         t=Ticket(number=next_ticket_number(db),title="Повышенная температура в бонете",description="Температура держится выше установленной. Проверить холодильный контур.",category="Ремонт",priority="high",status="assigned",site_id=sites[0].id,equipment_id=eqs[0].id,requester_id=admin.id if admin else None,assignee_id=tech.id if tech else None,sla_due_at=datetime.utcnow()+timedelta(hours=8))
-        db.add(t)
+        db.add(t); db.flush()
+        if tech:
+            end=datetime.utcnow()-timedelta(minutes=15)
+            start=end-timedelta(minutes=35)
+            db.add(TicketWorkSession(ticket_id=t.id,user_id=tech.id,started_at=start,ended_at=end,duration_seconds=35*60,note="Первичная диагностика",source="manual"))
 
     if not db.query(InventoryItem).first():
         db.add_all([InventoryItem(sku="ZIP-001",name="Вентилятор 230В",qty=3,min_qty=2,unit="шт",unit_cost=28000),InventoryItem(sku="ZIP-002",name="Фильтр кондиционера",qty=4,min_qty=5,unit="шт",unit_cost=6500),InventoryItem(sku="MAT-001",name="Хладагент",qty=12,min_qty=5,unit="кг",unit_cost=9000)])

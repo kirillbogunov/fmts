@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
-from app.models import Site, Ticket, User
+from app.models import Site, Ticket, User, TicketWorkSession
 from app.services.kpi import calculate_monthly_kpi, parse_period
 
 
@@ -37,7 +37,12 @@ def test_monthly_kpi_score_and_rating():
         sla_due_at=start + timedelta(days=1, hours=4),
         resolved_at=start + timedelta(days=1, hours=8), master_comment="",
     )
-    db.add_all([t1, t2]); db.commit()
+    db.add_all([t1, t2]); db.flush()
+    db.add_all([
+        TicketWorkSession(ticket_id=t1.id,user_id=tech.id,started_at=start,ended_at=start+timedelta(hours=2),duration_seconds=7200),
+        TicketWorkSession(ticket_id=t2.id,user_id=tech.id,started_at=start+timedelta(days=1),ended_at=start+timedelta(days=1,hours=3),duration_seconds=10800),
+    ])
+    db.commit()
 
     report = calculate_monthly_kpi(db, parse_period("2026-09"), target_points=2)
     row = report["rows"][0]
@@ -49,6 +54,8 @@ def test_monthly_kpi_score_and_rating():
     assert row["documentation_rate"] == 50.0
     assert row["score"] == 72.5
     assert row["rating"] == 3.6
+    assert row["tracked_hours"] == 5.0
+    assert row["avg_tracked_hours"] == 2.5
     assert row["rank"] == 1
 
 

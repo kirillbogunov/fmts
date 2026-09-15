@@ -7,7 +7,7 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-from app.models import Ticket, User
+from app.models import Ticket, User, TicketWorkSession
 
 COMPLETED_STATUSES = {"resolved", "closed"}
 CANCELLED_STATUSES = {"cancelled"}
@@ -160,6 +160,27 @@ def calculate_monthly_kpi(
         ]
         avg_resolution_hours = _hours(sum(durations) / len(durations)) if durations else 0.0
 
+        # Actual hands-on time recorded by the timer. Sessions crossing the month
+        # boundary are counted only for the part that falls inside the selected month.
+        time_entries = (
+            db.query(TicketWorkSession)
+            .filter(
+                TicketWorkSession.user_id == technician.id,
+                TicketWorkSession.started_at < period.end,
+                (TicketWorkSession.ended_at.is_(None)) | (TicketWorkSession.ended_at >= period.start),
+            )
+            .all()
+        )
+        now_for_time = min(datetime.utcnow(), period.end)
+        tracked_seconds = 0
+        for entry in time_entries:
+            start_at = max(entry.started_at, period.start)
+            end_at = min(entry.ended_at or now_for_time, period.end)
+            if end_at > start_at:
+                tracked_seconds += int((end_at - start_at).total_seconds())
+        tracked_hours = round(tracked_seconds / 3600.0, 1)
+        avg_tracked_hours = round(tracked_hours / completed_count, 1) if completed_count else 0.0
+
         open_backlog = (
             db.query(Ticket)
             .filter(
@@ -196,6 +217,9 @@ def calculate_monthly_kpi(
                 "documentation_rate": documentation_rate,
                 "overdue_completed": overdue_completed,
                 "avg_resolution_hours": avg_resolution_hours,
+                "tracked_hours": tracked_hours,
+                "avg_tracked_hours": avg_tracked_hours,
+                "work_sessions": len(time_entries),
                 "open_backlog": open_backlog,
                 "overdue_open": overdue_open,
                 "score": score,
@@ -229,6 +253,7 @@ def calculate_monthly_kpi(
         "team_sla": team_sla,
         "total_completed": total_completed,
         "total_points": round(sum(r["points"] for r in rows), 2),
+        "total_tracked_hours": round(sum(r["tracked_hours"] for r in rows), 1),
         "leader": active_rows[0] if active_rows else None,
         "technicians_count": len(technicians),
         "active_technicians_count": len(active_rows),

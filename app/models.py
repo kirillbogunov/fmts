@@ -78,6 +78,7 @@ class Ticket(Base):
     contractor: Mapped[Contractor | None] = relationship()
     comments: Mapped[list[TicketComment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
     attachments: Mapped[list[Attachment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
+    work_sessions: Mapped[list[TicketWorkSession]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
 
 class TicketComment(Base):
     __tablename__ = "ticket_comments"
@@ -97,6 +98,19 @@ class Attachment(Base):
     stored_name: Mapped[str] = mapped_column(String(255))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ticket: Mapped[Ticket] = relationship(back_populates="attachments")
+
+class TicketWorkSession(Base):
+    __tablename__ = "ticket_work_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    note: Mapped[str] = mapped_column(String(255), default="")
+    source: Mapped[str] = mapped_column(String(20), default="timer")
+    ticket: Mapped[Ticket] = relationship(back_populates="work_sessions")
+    user: Mapped[User] = relationship()
 
 class MaintenancePlan(Base):
     __tablename__ = "maintenance_plans"

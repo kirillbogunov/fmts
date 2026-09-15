@@ -23,13 +23,14 @@
   <div class="metric"><span>Выполнено заявок</span><strong>{{report.total_completed}}</strong></div>
   <div class="metric"><span>SLA вовремя</span><strong>{{report.team_sla}}%</strong></div>
   <div class="metric"><span>Баллы выполненных работ</span><strong>{{report.total_points}}</strong></div>
+  <div class="metric"><span>Фактическое время работ</span><strong>{{report.total_tracked_hours}} ч</strong></div>
   <div class="metric kpi-leader-card"><span>Лидер месяца</span><strong>{% if report.leader %}{{report.leader.name}}{% else %}—{% endif %}</strong>{% if report.leader %}<small>{{report.leader.score}}% · {{report.leader.rating}} / 5</small>{% endif %}</div>
 </div>
 
 <section class="panel kpi-rating-panel">
   <div class="panelhead"><div><h2>Рейтинг ремонтников</h2><p class="muted">Целевой объём: {{report.target_points}} баллов работ на месяц</p></div></div>
   <table class="responsive-table kpi-table">
-    <thead><tr><th>Место</th><th>Ремонтник</th><th>KPI</th><th>Рейтинг</th><th>Выполнено</th><th>SLA</th><th>Закрытие</th><th>Баллы</th><th>Документация</th><th>Ср. время</th></tr></thead>
+    <thead><tr><th>Место</th><th>Ремонтник</th><th>KPI</th><th>Рейтинг</th><th>Выполнено</th><th>SLA</th><th>Закрытие</th><th>Баллы</th><th>Документация</th><th>Факт. время</th><th>Ср. цикл</th></tr></thead>
     <tbody>
     {% for x in report.rows %}
       <tr class="{% if x.rank == 1 %}kpi-first{% elif not x.has_activity %}kpi-no-activity{% endif %}">
@@ -42,10 +43,11 @@
         <td data-label="Закрытие">{{x.closure_rate}}%</td>
         <td data-label="Баллы"><b>{{x.points}}</b><small>{{x.productivity_rate}}% цели</small></td>
         <td data-label="Документация">{{x.documentation_rate}}%</td>
-        <td data-label="Ср. время">{% if x.completed %}{{x.avg_resolution_hours}} ч{% else %}—{% endif %}</td>
+        <td data-label="Факт. время"><b>{{x.tracked_hours}} ч</b><small>{% if x.completed %}{{x.avg_tracked_hours}} ч / заявку{% else %}{{x.work_sessions}} сеанс(а){% endif %}</small></td>
+        <td data-label="Ср. цикл">{% if x.completed %}{{x.avg_resolution_hours}} ч{% else %}—{% endif %}<small>от создания до закрытия</small></td>
       </tr>
     {% else %}
-      <tr><td class="empty-row" colspan="10">Нет активных пользователей с ролью «Техник»</td></tr>
+      <tr><td class="empty-row" colspan="11">Нет активных пользователей с ролью «Техник»</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -70,7 +72,7 @@
       <div><span>Высокий</span><b>1,5</b></div>
       <div><span>Срочный</span><b>2,0</b></div>
     </div>
-    <p class="muted kpi-note">Важно: текущая версия считает KPI по текущему исполнителю заявки. Если заявку переназначали между ремонтниками, история переназначений пока не распределяет вклад автоматически.</p>
+    <p class="muted kpi-note">Фактическое время берётся из таймера заявки и отображается в отчёте, но пока не влияет на итоговый балл KPI. Это сделано специально, чтобы не поощрять ни искусственное увеличение времени, ни слишком быстрое закрытие работ.</p><p class="muted kpi-note">Важно: текущая версия считает KPI по текущему исполнителю заявки. Если заявку переназначали между ремонтниками, история переназначений пока не распределяет вклад автоматически.</p>
   </section>
 </div>
 {% endblock %}
