@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><h1>Новое оборудование</h1><p>Создание цифрового паспорта</p></div></div>
+<form class="panel form" method="post"><div class="form-grid"><label>Объект<select name="site_id" required>{% for x in sites %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label><label>Инвентарный номер<input name="inventory_no" required></label><label>Наименование<input name="name" required></label><label>Категория<input name="category" value="Прочее"></label><label>Модель<input name="model"></label><label>Серийный номер<input name="serial_no"></label><label>Статус<select name="status">{% for opt in status_options %}<option value="{{opt.code}}">{{opt.name}}</option>{% endfor %}</select></label></div><div class="actions"><a class="btn" href="/equipment">Отмена</a><button class="btn primary">Создать</button></div></form>
+{% endblock %}

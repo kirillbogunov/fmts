@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><h1>Настройки системы</h1><p>Статусы, приоритеты, SLA, категории и подсветки хранятся внутри ТОиР.</p></div></div>
+{% if message %}<div class="notice ok">{{message}}</div>{% endif %}
+<section class="panel"><h2>Самостоятельное ядро</h2><p>Эти значения являются основными для работы системы. Интеграции с 1С или другими ERP могут обмениваться данными, но не требуются для работы ТОиР.</p></section>
+{% for kind, rows in grouped.items() %}
+<section class="panel"><h2>{{kind_labels.get(kind,kind)}}</h2>
+<div class="settings-grid">
+{% for row in rows %}
+<form method="post" action="/settings/reference-data/{{row.id}}/update" class="setting-card">
+  <div class="setting-title"><span class="badge" style="background-color:{{row.bg_color}};color:{{row.text_color}};border:1px solid {{row.border_color}}">{{row.name}}</span><code>{{row.code}}</code></div>
+  <label>Название<input name="name" value="{{row.name}}" required></label>
+  <div class="color-row"><label>Фон<input type="color" name="bg_color" value="{{row.bg_color or '#eef1f5'}}"></label><label>Текст<input type="color" name="text_color" value="{{row.text_color or '#536071'}}"></label><label>Граница<input type="color" name="border_color" value="{{row.border_color or '#dce2e9'}}"></label></div>
+  {% if kind == 'priority' %}<label>SLA, часов<input type="number" min="1" name="sla_hours" value="{{row.sla_hours or ''}}"></label>{% else %}<input type="hidden" name="sla_hours" value="">{% endif %}
+  <label>Порядок<input type="number" name="sort_order" value="{{row.sort_order}}"></label>
+  <label class="checkline"><input type="checkbox" name="active" value="1" {% if row.active %}checked{% endif %}> Активно</label>
+  <button class="btn" type="submit">Сохранить</button>
+</form>
+{% endfor %}
+</div></section>
+{% endfor %}
+<section class="panel"><h2>Добавить значение</h2>
+<form method="post" action="/settings/reference-data/new" class="form form-grid">
+<input type="hidden" name="kind" value="category"><label>Раздел<input value="Категория работ" disabled></label>
+<label>Код категории<input name="code" required placeholder="Например: Охрана"></label>
+<label>Название<input name="name" required></label>
+<label>Фон<input type="color" name="bg_color" value="#eef1f5"></label>
+<label>Текст<input type="color" name="text_color" value="#536071"></label>
+<label>Граница<input type="color" name="border_color" value="#dce2e9"></label>
+<label>SLA, часов<input type="number" name="sla_hours" min="1"></label>
+<label>Порядок<input type="number" name="sort_order" value="100"></label>
+<div><button class="btn primary" type="submit">Добавить</button></div>
+</form></section>
+{% endblock %}

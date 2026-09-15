@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><h1>О программе</h1><p>FMTS — Facility Management & Task System</p></div></div>
+<div class="grid2">
+<section class="panel">
+<h2>FMTS</h2>
+<p><b>Facility Management & Task System</b></p>
+<p>Система задач и мониторинга работы хозяйственного отдела: заявки, оборудование, техническое обслуживание, ППР, склад ЗИП, исполнители и затраты.</p>
+<div class="facts">
+<div><span>Версия</span><b>{{ app_version }}</b></div>
+<div><span>Режим</span><b>Самостоятельное ядро</b></div>
+<div><span>Разработчик</span><b>{{ developer_name }}</b></div>
+<div><span>Год</span><b>2026</b></div>
+<div><span>Telegram</span><b><a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></b></div>
+</div>
+</section>
+<section class="panel">
+<h2>Авторские сведения</h2>
+<p><b>Разработчик: Кирилл Вадимович Богунов © 2026</b></p>
+<p>Связь с разработчиком: <a href="https://t.me/kirill_bogunov" target="_blank" rel="noopener">Telegram @kirill_bogunov</a>.</p>
+<p class="muted">Интеграции с 1С и другими внешними системами являются дополнительными модулями и не требуются для работы ядра FMTS.</p>
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><h1>Интеграции</h1><p>ТОиР работает самостоятельно. Внешние системы подключаются только при необходимости.</p></div></div>
+<section class="panel">
+<h2>1С — дополнительный коннектор</h2>
+<div class="integration-status {% if settings.onec_enabled and status.ok %}ok{% else %}neutral{% endif %}"><b>{% if not settings.onec_enabled %}● Отключено{% elif status.ok %}● Подключено{% else %}● Настроено, но недоступно{% endif %}</b><span>{% if settings.onec_enabled %}{{status.message}}{% else %}Самостоятельное ядро не зависит от 1С{% endif %}</span></div>
+<div class="facts two"><div><span>Режим</span><b>Самостоятельное ядро</b></div><div><span>Автоотправка заявок в 1С</span><b>{% if settings.onec_auto_push %}Включена{% else %}Выключена{% endif %}</b></div><div><span>Адрес 1С</span><b>{{settings.onec_base_url or 'не задан'}}</b></div><div><span>REST API ТОиР</span><b>/docs</b></div></div>
+</section>
+{% if settings.onec_enabled %}
+<div class="cards actions-cards">
+<form class="metric" method="post" action="/api/integration/1c/pull/sites"><span>Импорт из 1С</span><strong>Подразделения</strong><button class="btn">Импортировать</button></form>
+<form class="metric" method="post" action="/api/integration/1c/pull/tickets"><span>Импорт из 1С</span><strong>Заявки</strong><button class="btn">Импортировать</button></form>
+<form class="metric" method="post" action="/api/integration/1c/pull/equipment"><span>Импорт из 1С</span><strong>Оборудование</strong><button class="btn">Импортировать</button></form>
+<form class="metric" method="post" action="/api/integration/1c/pull/inventory"><span>Импорт из 1С</span><strong>ТМЦ / ЗИП</strong><button class="btn">Импортировать</button></form>
+<form class="metric" method="post" action="/api/integration/1c/pull/ui"><span>Одноразовый импорт</span><strong>Оформление / SLA</strong><button class="btn">Импортировать</button></form>
+</div>
+{% endif %}
+<section class="panel"><h2>Принцип работы</h2><p><b>Главный источник данных — сам ТОиР.</b> Объекты, оборудование, пользователи, заявки, ППР, склад, статусы, приоритеты, категории, SLA и цвета хранятся в собственной базе.</p><p>1С можно включить позже для импорта справочников, обмена заявками, номенклатурой и затратами. При отключении 1С никакая функция ядра не перестаёт работать.</p><p class="muted">Настройка коннектора выполняется через переменные <code>ONEC_*</code> в <code>.env</code>. По умолчанию <code>ONEC_ENABLED=false</code> и <code>ONEC_AUTO_PUSH=false</code>.</p></section>
+{% endblock %}

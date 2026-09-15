@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><div class="eyebrow">{{ticket.number}}</div><h1>{{ticket.title}}</h1><p>{{ticket.site.name}}{% if ticket.room %} · {{ticket.room}}{% endif %}{% if ticket.equipment %} · <a href="/equipment/{{ticket.equipment.id}}">{{ticket.equipment.name}}</a>{% endif %}</p></div><span class="badge big s-{{ticket.status}}" style="{{badge_style('status',ticket.status)}}">{{ui_name('status',ticket.status,status_labels.get(ticket.status,ticket.status))}}</span></div>
+<div class="grid2 wide-left">
+<div>
+<section class="panel"><h2>Описание</h2><p class="pre">{{ticket.description or 'Описание не указано'}}</p>
+<div class="facts two"><div><span>Заявитель</span><b>{{ticket.requester_name or (ticket.requester.full_name if ticket.requester else '—')}}</b></div><div><span>Телефон</span><b>{{ticket.requester_phone or '—'}}</b></div>{% if settings.onec_enabled %}<div><span>1С GUID</span><b>{{ticket.one_c_id or '—'}}</b></div><div><span>Синхронизация 1С</span><b>{% if ticket.onec_sync_error %}Ошибка: {{ticket.onec_sync_error}}{% elif ticket.onec_synced_at %}{{ticket.onec_synced_at.strftime('%d.%m.%Y %H:%M')}}{% else %}—{% endif %}</b></div>{% endif %}</div>
+{% if ticket.attachments %}<div class="files">{% for f in ticket.attachments %}<a href="/uploads/{{f.stored_name}}" target="_blank">📎 {{f.filename}}</a>{% endfor %}</div>{% endif %}</section>
+<section class="panel"><h2>История и комментарии</h2>{% for c in ticket.comments %}<div class="comment"><b>{{c.user.full_name if c.user else 'Система'}}</b><time>{{c.created_at.strftime('%d.%m.%Y %H:%M')}}</time><p>{{c.body}}</p></div>{% else %}<p class="muted">Комментариев пока нет.</p>{% endfor %}<form method="post" action="/tickets/{{ticket.id}}/comment"><textarea name="body" rows="3" required placeholder="Комментарий по работе"></textarea><button class="btn primary">Добавить</button></form></section>
+</div>
+<div>
+<section class="panel"><h2>Управление</h2><form method="post" action="/tickets/{{ticket.id}}/update" class="form compact">
+<label>Статус<select name="status">{% for x in status_options %}<option value="{{x.code}}" {% if ticket.status==x.code %}selected{% endif %}>{{x.name}}</option>{% endfor %}</select></label>
+<label>Исполнитель<select name="assignee_id"><option value="">Не назначен</option>{% for x in users %}<option value="{{x.id}}" {% if ticket.assignee_id==x.id %}selected{% endif %}>{{x.full_name}}</option>{% endfor %}</select></label>
+<label>Подрядчик<select name="contractor_id"><option value="">Без подрядчика</option>{% for x in contractors %}<option value="{{x.id}}" {% if ticket.contractor_id==x.id %}selected{% endif %}>{{x.name}}</option>{% endfor %}</select></label>
+<label>Комментарий мастера<textarea name="master_comment" rows="3">{{ticket.master_comment or ''}}</textarea></label>
+<label>Стоимость работ, ₸<input type="number" step="0.01" name="labor_cost" value="{{ticket.labor_cost}}"></label><button class="btn primary">Сохранить</button></form>
+{% if settings.onec_enabled and (ticket.one_c_id or ticket.onec_sync_error) %}<form method="post" action="/api/integration/1c/push/tickets/{{ticket.id}}" style="margin-top:10px"><button class="btn">Отправить в 1С</button></form>{% endif %}</section>
+<section class="panel"><h2>ЗИП / материалы</h2><form method="post" action="/tickets/{{ticket.id}}/stock" class="form compact"><label>Позиция<select name="item_id">{% for x in inventory %}<option value="{{x.id}}">{{x.name}} — {{x.qty}} {{x.unit}}</option>{% endfor %}</select></label><label>Количество<input type="number" step="0.001" min="0.001" name="qty" required></label><button class="btn">Списать в заявку</button></form></section>
+<section class="panel facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div><div><span>Затраты</span><b>{{ (ticket.labor_cost or 0) + (ticket.parts_cost or 0) }} ₸</b></div></section>
+</div></div>
+{% endblock %}

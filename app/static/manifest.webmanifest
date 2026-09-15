@@ -1,0 +1,26 @@
+{
+  "name": "FMTS — Facility Management & Task System",
+  "short_name": "FMTS",
+  "description": "FMTS — система задач и мониторинга работы хозяйственного отдела: заявки, оборудование, ТО/ППР, склад ЗИП и ремонты. Разработчик: Кирилл Вадимович Богунов © 2026.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/",
+  "developer": "Кирилл Вадимович Богунов © 2026 · Telegram @kirill_bogunov"
+}

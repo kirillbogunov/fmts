@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block title %}Дашборд — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead"><div><h1>Дашборд</h1><p>Состояние эксплуатации и заявок</p></div><a class="btn primary" href="/tickets/new">+ Новая заявка</a></div>
+<div class="cards">
+<div class="metric"><span>Открытые заявки</span><strong>{{ open_count }}</strong></div>
+<div class="metric danger-m"><span>Просрочено SLA</span><strong>{{ overdue }}</strong></div>
+<div class="metric"><span>Единиц оборудования</span><strong>{{ equipment_count }}</strong></div>
+<div class="metric warn-m"><span>ТО в ближайшие 7 дней</span><strong>{{ due_maintenance }}</strong></div>
+<div class="metric"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong></div>
+</div>
+<div class="grid2">
+<section class="panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>
+<table><thead><tr><th>№</th><th>Заявка</th><th>Объект</th><th>Статус</th></tr></thead><tbody>
+{% for t in recent %}<tr><td><a href="/tickets/{{ t.id }}">{{ t.number }}</a></td><td>{{ t.title }}</td><td>{{ t.site.name }}</td><td><span class="badge s-{{t.status}}" style="{{badge_style('status',t.status)}}">{{ui_name('status',t.status,status_labels.get(t.status,t.status))}}</span></td></tr>{% else %}<tr><td colspan="4">Заявок пока нет</td></tr>{% endfor %}
+</tbody></table></section>
+<section class="panel"><div class="panelhead"><h2>Заявки по статусам</h2></div><div class="status-list">
+{% for status,count in by_status %}<div><span class="badge s-{{status}}" style="{{badge_style('status',status)}}">{{ui_name('status',status,status_labels.get(status,status))}}</span><b>{{ count }}</b></div>{% else %}<p>Нет данных</p>{% endfor %}
+</div></section>
+</div>
+{% endblock %}

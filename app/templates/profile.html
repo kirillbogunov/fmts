@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><h1>Профиль</h1><p>{{user.full_name}} · {{role_labels.get(user.role, user.role)}}</p></div></div>
+<div class="grid2"><section class="panel"><h2>Сменить пароль</h2>{% if message %}<div class="alert {% if ok %}ok{% else %}danger{% endif %}">{{message}}</div>{% endif %}<form class="form compact" method="post" action="/profile/password"><label>Текущий пароль<input type="password" name="current_password" required autocomplete="current-password"></label><label>Новый пароль<input type="password" name="new_password" required minlength="10" autocomplete="new-password"></label><button class="btn primary">Сменить пароль</button></form><p class="muted">Для доступа из Интернета используйте уникальный пароль не короче 10 символов.</p></section></div>
+{% endblock %}
