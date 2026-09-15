@@ -3,7 +3,7 @@
 <div class="login-page"><form class="login-card" method="post" action="/login">
 <div class="login-logo">⚙</div><h1>FMTS</h1><p><b>Facility Management & Task System</b><br>Система задач и мониторинга работы хозяйственного отдела</p>
 {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
-<label>Логин<input name="username" autocomplete="username" required></label>
+{% if next_url %}<input type="hidden" name="next_url" value="{{next_url}}">{% endif %}<label>Логин<input name="username" autocomplete="username" required></label>
 <label>Пароль<input type="password" name="password" autocomplete="current-password" required></label>
 <button class="btn primary" type="submit">Войти</button>
 <div class="hint">Первичный администратор задаётся в файле .env</div>

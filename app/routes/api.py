@@ -9,14 +9,15 @@ from app.services.one_c import OneCClient, OneCError, pick
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.sync import ticket_to_1c_payload, push_ticket_to_1c, upsert_ticket_from_1c
 from app.labels import STATUS_LABELS, PRIORITY_LABELS, EQUIPMENT_STATUS_LABELS
+from app.access import has_permission, require_permission, scope_ticket_query
+from app.security import current_user
 from app.services.ui_styles import upsert_ui_styles, styles_cache, display_name, badge_css, sla_hours_for
 
 router = APIRouter(prefix="/api", tags=["api"])
 settings = get_settings()
 
 def _auth(request: Request, db: Session):
-    uid = request.session.get("user_id")
-    user = db.get(User, uid) if uid else None
+    user=current_user(request,db)
     if not user:
         raise HTTPException(401, "Требуется авторизация")
     return user
@@ -31,12 +32,14 @@ def health():
 
 @router.get("/sites")
 def sites(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db)
+    user=_auth(request, db)
+    require_permission(user,"site.view","Недостаточно прав для просмотра объектов через API")
     return [{"id": x.id, "name": x.name, "address": x.address, "one_c_id": x.one_c_id} for x in db.query(Site).order_by(Site.name).all()]
 
 @router.get("/equipment")
 def equipment(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db)
+    user=_auth(request, db)
+    require_permission(user,"equipment.view","Недостаточно прав для просмотра оборудования через API")
     rows = db.query(Equipment).order_by(Equipment.name).all()
     ui=styles_cache(db)
     return [{"id":x.id,"name":x.name,"inventory_no":x.inventory_no,"site":x.site.name,"status":x.status,
@@ -45,8 +48,10 @@ def equipment(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/tickets")
 def tickets(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db)
-    rows = db.query(Ticket).order_by(Ticket.id.desc()).limit(500).all()
+    user=_auth(request, db)
+    if not (has_permission(user,"ticket.list") or has_permission(user,"ticket.list_all")):
+        raise HTTPException(403,"Недостаточно прав")
+    rows = scope_ticket_query(db.query(Ticket),user).order_by(Ticket.id.desc()).limit(500).all()
     ui=styles_cache(db)
     return [{"id":x.id,"number":x.number,"title":x.title,"status":x.status,
              "status_name":display_name(ui,"status",x.status,STATUS_LABELS.get(x.status,x.status)),
@@ -71,17 +76,26 @@ def ui_styles(request: Request, db: Session = Depends(get_db)):
 @router.post("/tickets")
 def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)):
     user = _auth(request, db)
+    require_permission(user,"ticket.create","Недостаточно прав для создания заявки")
     site = db.get(Site, int(payload.get("site_id", 0)))
     if not site: raise HTTPException(400, "Не найден объект")
-    priority = payload.get("priority", "normal")
+    eq_id=int(payload["equipment_id"]) if payload.get("equipment_id") else None
+    if eq_id:
+        eq=db.get(Equipment,eq_id)
+        if not eq or eq.site_id!=site.id: raise HTTPException(400,"Оборудование не относится к выбранному объекту")
+    priority = str(payload.get("priority", "normal")) if has_permission(user,"ticket.set_priority") else "normal"
+    assignee_id=None
+    if payload.get("assignee_id") and has_permission(user,"ticket.assign"):
+        candidate=db.get(User,int(payload["assignee_id"]))
+        if not candidate or not candidate.active or candidate.role!="technician": raise HTTPException(400,"Исполнителем может быть только активный техник")
+        assignee_id=candidate.id
     sla_hours = sla_hours_for(db, priority)
     t = Ticket(number=next_ticket_number(db), title=str(payload.get("title") or "Без названия"),
                description=str(payload.get("description") or ""), category=str(payload.get("category") or "Другое"),
-               priority=priority, status="assigned" if payload.get("assignee_id") else "new", site_id=site.id,
-               equipment_id=int(payload["equipment_id"]) if payload.get("equipment_id") else None,
-               requester_id=user.id, requester_name=user.full_name,
+               priority=priority, status="assigned" if assignee_id else "new", site_id=site.id,
+               equipment_id=eq_id, requester_id=user.id, requester_name=user.full_name,
                requester_phone=str(payload.get("phone") or ""), room=str(payload.get("room") or ""),
-               assignee_id=int(payload["assignee_id"]) if payload.get("assignee_id") else None,
+               assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""),
                sla_due_at=datetime.utcnow()+timedelta(hours=sla_hours))
     db.add(t); db.commit(); db.refresh(t)
     push_ticket_to_1c(db, t)
@@ -89,7 +103,8 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
 
 @router.post("/maintenance/generate")
 def maintenance_generate(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db)
+    user=_auth(request, db)
+    require_permission(user,"maintenance.manage","Недостаточно прав для генерации ППР")
     return {"created": generate_due_maintenance(db)}
 
 # ---------- 1C -> TOIR. This endpoint intentionally does NOT use a browser session. ----------
@@ -116,12 +131,12 @@ def onec_webhook_ui(payload: object = Body(...), x_toir_token: str | None = Head
 
 @router.get("/integration/1c/status")
 def onec_status(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db)
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору")
     return OneCClient().health()
 
 @router.post("/integration/1c/pull/ui")
 def onec_pull_ui(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); client = OneCClient()
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); client = OneCClient()
     try:
         rows = client.get_items(client.s.onec_ui_path)
         count = upsert_ui_styles(db, rows, full_replace=False)
@@ -131,7 +146,7 @@ def onec_pull_ui(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/integration/1c/pull/sites")
 def onec_pull_sites(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); client = OneCClient()
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); client = OneCClient()
     try: rows = client.get_items(client.s.onec_sites_path)
     except OneCError as e: raise HTTPException(502, str(e))
     count = 0
@@ -149,7 +164,7 @@ def onec_pull_sites(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/integration/1c/pull/equipment")
 def onec_pull_equipment(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); client = OneCClient()
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); client = OneCClient()
     try: rows = client.get_items(client.s.onec_equipment_path)
     except OneCError as e: raise HTTPException(502, str(e))
     count=0; skipped=0
@@ -177,7 +192,7 @@ def onec_pull_equipment(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/integration/1c/pull/inventory")
 def onec_pull_inventory(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); client=OneCClient()
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); client=OneCClient()
     try: rows=client.get_items(client.s.onec_inventory_path)
     except OneCError as e: raise HTTPException(502, str(e))
     count=0
@@ -201,7 +216,7 @@ def onec_pull_inventory(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/integration/1c/pull/tickets")
 def onec_pull_tickets(request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); client=OneCClient()
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); client=OneCClient()
     try: rows=client.get_items(client.s.onec_tickets_path)
     except OneCError as e: raise HTTPException(502, str(e))
     count=0
@@ -211,7 +226,7 @@ def onec_pull_tickets(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/integration/1c/push/tickets/{ticket_id}")
 def onec_push_ticket(ticket_id:int, request: Request, db: Session = Depends(get_db)):
-    _auth(request, db); t=db.get(Ticket,ticket_id)
+    user=_auth(request, db); require_permission(user,"integration.manage","Доступ к интеграциям только администратору"); t=db.get(Ticket,ticket_id)
     if not t: raise HTTPException(404,"Заявка не найдена")
     try:
         result = push_ticket_to_1c(db, t, raise_errors=True, force=True)

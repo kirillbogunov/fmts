@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models import Ticket, TicketWorkSession, User
 
 CLOSED_STATUSES = {"resolved", "closed", "cancelled"}
-TIME_ROLES = {"technician", "dispatcher", "manager", "admin"}
+TIME_ROLES = {"technician"}
 
 
 def session_seconds(entry: TicketWorkSession, now: datetime | None = None) -> int:
@@ -101,13 +101,13 @@ def close_active_for_ticket(db: Session, ticket_id: int, now: datetime | None = 
 
 
 def can_track_time(user: User, ticket: Ticket) -> bool:
-    if user.role not in TIME_ROLES:
+    # Only the technician explicitly assigned to the ticket can book repair time.
+    # Dispatchers/managers can supervise the entries but must not distort technician KPI.
+    if user.role not in TIME_ROLES or not user.active:
         return False
     if ticket.status in CLOSED_STATUSES:
         return False
-    if user.role == "technician" and ticket.assignee_id not in (None, user.id):
-        return False
-    return True
+    return ticket.assignee_id == user.id
 
 
 def start_work(db: Session, ticket: Ticket, user: User, note: str = "") -> TicketWorkSession:
@@ -116,9 +116,6 @@ def start_work(db: Session, ticket: Ticket, user: User, note: str = "") -> Ticke
     now = datetime.utcnow()
     # Один человек не может одновременно учитывать время по нескольким заявкам.
     close_active_for_user(db, user.id, now)
-    if user.role == "technician" and ticket.assignee_id is None:
-        ticket.assignee_id = user.id
-        ticket.master_name = user.full_name
     if ticket.status in {"new", "assigned", "waiting"}:
         ticket.status = "in_progress"
     ticket.updated_at = now

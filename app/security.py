@@ -27,4 +27,10 @@ def verify_password(password: str, encoded: str) -> bool:
 
 def current_user(request: Request, db: Session):
     uid = request.session.get("user_id")
-    return db.get(User, uid) if uid else None
+    if not uid:
+        return None
+    user=db.get(User, uid)
+    if not user or not user.active:
+        request.session.clear()
+        return None
+    return user

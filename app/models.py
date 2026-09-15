@@ -158,6 +158,20 @@ class Contractor(Base):
     specialization: Mapped[str] = mapped_column(String(180), default="")
     rating: Mapped[float] = mapped_column(Float, default=5.0)
 
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(100), index=True)
+    entity_type: Mapped[str] = mapped_column(String(60), default="")
+    entity_id: Mapped[str] = mapped_column(String(80), default="")
+    result: Mapped[str] = mapped_column(String(20), default="allowed", index=True)
+    details: Mapped[str] = mapped_column(Text, default="")
+    ip_address: Mapped[str] = mapped_column(String(80), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    user: Mapped[User | None] = relationship()
+
 class UiStyle(Base):
     """Local reference data and presentation rules owned by the standalone TOIR core.
 

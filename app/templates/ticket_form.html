@@ -8,8 +8,8 @@
 <label>Кабинет / зона<input name="room" placeholder="Например: торговый зал, кабинет 12"></label>
 <label>Телефон заявителя<input name="phone" inputmode="tel" placeholder="+7 ..."></label>
 <label>Оборудование<select name="equipment_id"><option value="">Без привязки</option>{% for x in equipment %}<option value="{{x.id}}" {% if selected_equipment_id==x.id %}selected{% endif %}>{{x.inventory_no}} — {{x.name}} ({{x.site.name}})</option>{% endfor %}</select></label>
-<label>Приоритет<select name="priority">{% for p in priority_options %}<option value="{{p.code}}">{{p.name}}{% if p.sla %} — {{p.sla}} ч{% endif %}</option>{% endfor %}</select></label>
-<label>Исполнитель<select name="assignee_id"><option value="">Назначить позже</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label>
+{% if can('ticket.set_priority') %}<label>Приоритет<select name="priority">{% for p in priority_options %}<option value="{{p.code}}">{{p.name}}{% if p.sla %} — {{p.sla}} ч{% endif %}</option>{% endfor %}</select></label>{% else %}<input type="hidden" name="priority" value="normal"><label>Приоритет<input value="Обычный — меняет диспетчер" disabled></label>{% endif %}
+{% if can('ticket.assign') %}<label>Исполнитель<select name="assignee_id"><option value="">Назначить позже</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label>{% else %}<input type="hidden" name="assignee_id" value=""><label>Исполнитель<input value="Назначит диспетчер" disabled></label>{% endif %}
 </div>
 <label>Описание<textarea name="description" rows="6" placeholder="Что произошло, где находится оборудование, дополнительные детали"></textarea></label>
 <label>Фото / файл<input type="file" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><small class="field-hint">На телефоне можно сразу выбрать снимок с камеры или галереи.</small></label>

@@ -27,15 +27,17 @@
   <nav>
     <a href="/" class="navitem {% if path == '/' %}active{% endif %}">▦ <span>Дашборд</span></a>
     <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}">☑ <span>Заявки</span></a>
-    <a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}">⌂ <span>Объекты</span></a>
-    <a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}">▣ <span>Оборудование</span></a>
-    <a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}">↻ <span>ТО / ППР</span></a>
-    <a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}">▤ <span>Склад / ЗИП</span></a>
-    <a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}">◉ <span>Подрядчики</span></a>
-    {% if user.role in ['admin','dispatcher','manager','technician'] %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}">★ <span>KPI / Рейтинг</span></a>{% endif %}
-    <a href="/integration" class="navitem {% if path.startswith('/integration') %}active{% endif %}">⇄ <span>Интеграции</span></a>
-    {% if user.role == 'admin' %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}">⚙ <span>Настройки</span></a><a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}">♙ <span>Пользователи</span></a>{% endif %}
-    <a href="/docs" class="navitem">API <span>REST API</span></a>
+    {% if nav.sites %}<a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}">⌂ <span>Объекты</span></a>{% endif %}
+    {% if nav.equipment %}<a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}">▣ <span>Оборудование</span></a>{% endif %}
+    {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}">↻ <span>ТО / ППР</span></a>{% endif %}
+    {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}">▤ <span>Склад / ЗИП</span></a>{% endif %}
+    {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}">◉ <span>Подрядчики</span></a>{% endif %}
+    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}">★ <span>KPI / Рейтинг</span></a>{% endif %}
+    {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}">☷ <span>Журнал контроля</span></a>{% endif %}
+    {% if nav.integration %}<a href="/integration" class="navitem {% if path.startswith('/integration') %}active{% endif %}">⇄ <span>Интеграции</span></a>{% endif %}
+    {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}">⚙ <span>Настройки</span></a>{% endif %}
+    {% if nav.users %}<a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}">♙ <span>Пользователи</span></a>{% endif %}
+    {% if user.role == 'admin' %}<a href="/docs" class="navitem">API <span>REST API</span></a>{% endif %}
     <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}">ⓘ <span>О программе</span></a>
   </nav>
   <button id="installPwa" class="navitem install-nav" type="button" hidden>▣ <span>Установить приложение</span></button>
@@ -52,8 +54,8 @@
 <nav class="mobile-bottom-nav" aria-label="Основная навигация">
   <a href="/" class="{% if path == '/' %}active{% endif %}"><span>⌂</span><small>Главная</small></a>
   <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>Заявки</small></a>
-  <a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>
-  <a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>ППР</small></a>
+  {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>{% endif %}
+  {% if nav.maintenance %}<a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>ППР</small></a>{% endif %}
   <a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>Профиль</small></a>
 </nav>
 {% else %}{% block anonymous %}{% endblock %}

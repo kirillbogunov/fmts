@@ -1,16 +1,21 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from starlette.middleware.sessions import SessionMiddleware
 from app.config import get_settings
-from app.db import Base, engine, SessionLocal
+from app.db import Base, engine, SessionLocal, get_db
 from app.migrations import run_lightweight_migrations
 from app.routes.web import router as web_router
 from app.routes.api import router as api_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
+from app.security import current_user
+from app.access import has_permission
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -44,6 +49,9 @@ async def lifespan(app: FastAPI):
 app=FastAPI(
     title=settings.app_name,
     version=settings.app_version,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
     description=(
         "FMTS — Facility Management & Task System. Система задач и мониторинга работы хозяйственного отдела, ServiceDesk / ТОиР. "
         f"Разработчик: {settings.developer_name} © 2026 · Telegram: {settings.developer_telegram}"
@@ -59,6 +67,25 @@ app.add_middleware(
     https_only=settings.cookie_https_only,
 )
 app.mount("/static",StaticFiles(directory=str(Path(__file__).resolve().parent/"static")),name="static")
-app.mount("/uploads",StaticFiles(directory=settings.upload_dir),name="uploads")
 app.include_router(api_router)
 app.include_router(web_router)
+
+
+def _admin_for_docs(request: Request, db=Depends(get_db)):
+    user=current_user(request,db)
+    if not user:
+        raise HTTPException(401,"Требуется авторизация")
+    if not has_permission(user,"users.manage"):
+        raise HTTPException(403,"Документация API доступна только администратору")
+    return user
+
+@app.get("/openapi.json", include_in_schema=False)
+def protected_openapi(request: Request, db=Depends(get_db)):
+    _admin_for_docs(request,db)
+    schema=get_openapi(title=app.title,version=app.version,description=app.description,routes=app.routes)
+    return JSONResponse(schema)
+
+@app.get("/docs", include_in_schema=False)
+def protected_docs(request: Request, db=Depends(get_db)):
+    _admin_for_docs(request,db)
+    return get_swagger_ui_html(openapi_url="/openapi.json",title=f"{settings.app_name} API")

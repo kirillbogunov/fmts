@@ -4,9 +4,9 @@
 <div class="cards">
 <div class="metric"><span>Открытые заявки</span><strong>{{ open_count }}</strong></div>
 <div class="metric danger-m"><span>Просрочено SLA</span><strong>{{ overdue }}</strong></div>
-<div class="metric"><span>Единиц оборудования</span><strong>{{ equipment_count }}</strong></div>
-<div class="metric warn-m"><span>ТО в ближайшие 7 дней</span><strong>{{ due_maintenance }}</strong></div>
-<div class="metric"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong></div>
+{% if equipment_count is not none %}<div class="metric"><span>Единиц оборудования</span><strong>{{ equipment_count }}</strong></div>{% endif %}
+{% if due_maintenance is not none %}<div class="metric warn-m"><span>{% if user.role=='technician' %}Мои ТО в ближайшие 7 дней{% else %}ТО в ближайшие 7 дней{% endif %}</span><strong>{{ due_maintenance }}</strong></div>{% endif %}
+{% if low_stock is not none %}<div class="metric"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong></div>{% endif %}
 </div>
 <div class="grid2">
 <section class="panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>

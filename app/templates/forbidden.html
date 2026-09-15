@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Доступ запрещён — {{ app_name }}{% endblock %}
+{% block content %}
+<section class="panel forbidden-panel">
+  <div class="forbidden-icon">⛔</div>
+  <h1>Доступ запрещён</h1>
+  <p>{{ message }}</p>
+  <div class="facts two"><div><span>Ваша роль</span><b>{{ role_labels.get(user.role,user.role) }}</b></div><div><span>Требуемое право</span><b><code>{{ permission }}</code></b></div></div>
+  <p class="muted">Попытка доступа зафиксирована в журнале безопасности.</p>
+  <div class="actions"><a class="btn primary" href="/">На главную</a><a class="btn" href="javascript:history.back()">Назад</a></div>
+</section>
+{% endblock %}

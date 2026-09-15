@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><h1>Оборудование</h1><p>Цифровые паспорта, история ремонтов и QR-коды</p></div><a class="btn primary" href="/equipment/new">+ Оборудование</a></div>
+<div class="pagehead"><div><h1>Оборудование</h1><p>Цифровые паспорта, история ремонтов и QR-коды</p></div>{% if can('equipment.manage') %}<a class="btn primary" href="/equipment/new">+ Оборудование</a>{% endif %}</div>
 <form class="filters"><select name="site_id"><option value="">Все объекты</option>{% for x in sites %}<option value="{{x.id}}" {% if site_id==x.id %}selected{% endif %}>{{x.name}}</option>{% endfor %}</select><button class="btn">Показать</button></form>
 <div class="equipment-grid">{% for e in equipment %}<a class="eq-card" href="/equipment/{{e.id}}"><div class="eq-icon">⚙</div><div><small>{{e.site.name}}</small><h3>{{e.name}}</h3><p>{{e.inventory_no}} · {{e.category}}</p><span class="badge s-{{e.status}}" style="{{badge_style('equipment_status',e.status)}}">{{ui_name('equipment_status',e.status,equipment_status_labels.get(e.status,e.status))}}</span></div></a>{% else %}<p>Оборудование отсутствует.</p>{% endfor %}</div>
 {% endblock %}
