@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, secrets
+import csv, io, json, os, secrets
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from decimal import Decimal
@@ -21,6 +21,7 @@ from app.labels import STATUS_LABELS, PRIORITY_LABELS, ROLE_LABELS, EQUIPMENT_ST
 from app.services.ui_styles import styles_cache, badge_css, display_name, options_for, sla_hours_for
 from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
+from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -97,6 +98,66 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
     }
     return templates.TemplateResponse("dashboard.html",ctx(request,db,**data))
 
+
+@router.get("/reports/kpi", response_class=HTMLResponse)
+def kpi_report(request:Request, month:str="", db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    if u.role not in ("admin","dispatcher","manager","technician"):
+        return RedirectResponse("/",303)
+    period=parse_period(month)
+    technician_ids=[u.id] if u.role=="technician" else None
+    report=calculate_monthly_kpi(
+        db, period,
+        target_points=settings.kpi_monthly_target_points,
+        weight_sla=settings.kpi_weight_sla,
+        weight_closure=settings.kpi_weight_closure,
+        weight_productivity=settings.kpi_weight_productivity,
+        weight_documentation=settings.kpi_weight_documentation,
+        technician_ids=technician_ids,
+    )
+    return templates.TemplateResponse("reports_kpi.html",ctx(
+        request,db,report=report,period=period,
+        prev_month=shift_month(period,-1),next_month=shift_month(period,1),
+    ))
+
+@router.get("/reports/kpi.csv")
+def kpi_report_csv(request:Request, month:str="", db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    if u.role not in ("admin","dispatcher","manager","technician"):
+        return RedirectResponse("/",303)
+    period=parse_period(month)
+    technician_ids=[u.id] if u.role=="technician" else None
+    report=calculate_monthly_kpi(
+        db, period,
+        target_points=settings.kpi_monthly_target_points,
+        weight_sla=settings.kpi_weight_sla,
+        weight_closure=settings.kpi_weight_closure,
+        weight_productivity=settings.kpi_weight_productivity,
+        weight_documentation=settings.kpi_weight_documentation,
+        technician_ids=technician_ids,
+    )
+    out=io.StringIO()
+    writer=csv.writer(out,delimiter=';',lineterminator='\n')
+    writer.writerow([
+        "Место","Ремонтник","KPI, %","Рейтинг / 5","Заявок в работе за период",
+        "Выполнено","Баллы работ","SLA вовремя, %","Закрытие, %",
+        "Производительность, %","Документирование, %","Среднее время ремонта, ч",
+        "Просрочено при выполнении","Открытый хвост сейчас","Просрочено сейчас"
+    ])
+    for row in report["rows"]:
+        writer.writerow([
+            row["rank"] or "",row["name"],str(row["score"]).replace('.',','),str(row["rating"]).replace('.',','),
+            row["handled"],row["completed"],str(row["points"]).replace('.',','),str(row["sla_rate"]).replace('.',','),
+            str(row["closure_rate"]).replace('.',','),str(row["productivity_rate"]).replace('.',','),
+            str(row["documentation_rate"]).replace('.',','),str(row["avg_resolution_hours"]).replace('.',','),
+            row["overdue_completed"],row["open_backlog"],row["overdue_open"],
+        ])
+    payload=('\ufeff'+out.getvalue()).encode('utf-8')
+    headers={"Content-Disposition": f'attachment; filename="FMTS_KPI_{period.value}.csv"'}
+    return Response(content=payload,media_type="text/csv; charset=utf-8",headers=headers)
+
 @router.get("/tickets", response_class=HTMLResponse)
 def tickets(request:Request,status:str="",q:str="",db:Session=Depends(get_db)):
     if not user_or_login(request,db): return RedirectResponse("/login",303)
@@ -142,7 +203,11 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
     t=db.get(Ticket,ticket_id)
     if t:
         t.status=status; t.assignee_id=int(assignee_id) if assignee_id else None; t.contractor_id=int(contractor_id) if contractor_id else None; t.labor_cost=Decimal(str(labor_cost or 0)); t.master_comment=master_comment; t.master_name=t.assignee.full_name if t.assignee else t.master_name; t.updated_at=datetime.utcnow()
-        if status in ("resolved","closed") and not t.resolved_at: t.resolved_at=datetime.utcnow()
+        if status in ("resolved","closed") and not t.resolved_at:
+            t.resolved_at=datetime.utcnow()
+        elif status not in ("resolved","closed") and t.resolved_at:
+            # Reopened ticket: final completion time must be recalculated for SLA/KPI.
+            t.resolved_at=None
         db.commit(); db.refresh(t); push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
 

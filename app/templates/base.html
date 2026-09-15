@@ -32,6 +32,7 @@
     <a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}">↻ <span>ТО / ППР</span></a>
     <a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}">▤ <span>Склад / ЗИП</span></a>
     <a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}">◉ <span>Подрядчики</span></a>
+    {% if user.role in ['admin','dispatcher','manager','technician'] %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}">★ <span>KPI / Рейтинг</span></a>{% endif %}
     <a href="/integration" class="navitem {% if path.startswith('/integration') %}active{% endif %}">⇄ <span>Интеграции</span></a>
     {% if user.role == 'admin' %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}">⚙ <span>Настройки</span></a><a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}">♙ <span>Пользователи</span></a>{% endif %}
     <a href="/docs" class="navitem">API <span>REST API</span></a>

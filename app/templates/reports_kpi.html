@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}KPI ремонтников — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead kpi-pagehead">
+  <div><div class="eyebrow">ОТЧЁТ ЗА МЕСЯЦ</div><h1>Рейтинг ремонтников / KPI</h1><p>Период: <b>{{ period.label }}</b>. Показатели считаются по заявкам, закреплённым за исполнителем.</p></div>
+  <div class="kpi-head-actions">
+    <a class="btn" href="/reports/kpi.csv?month={{period.value}}">⇩ CSV для Excel</a>
+    <button class="btn" type="button" onclick="window.print()">⎙ Печать / PDF</button>
+  </div>
+</div>
+
+<section class="panel kpi-filter-panel">
+  <form class="kpi-filter" method="get" action="/reports/kpi">
+    <a class="btn kpi-month-arrow" href="/reports/kpi?month={{prev_month}}" title="Предыдущий месяц">‹</a>
+    <label>Месяц<input type="month" name="month" value="{{period.value}}" required></label>
+    <button class="btn primary" type="submit">Показать</button>
+    <a class="btn kpi-month-arrow" href="/reports/kpi?month={{next_month}}" title="Следующий месяц">›</a>
+  </form>
+</section>
+
+<div class="cards kpi-summary">
+  <div class="metric"><span>Средний KPI команды</span><strong>{{report.avg_kpi}}%</strong></div>
+  <div class="metric"><span>Выполнено заявок</span><strong>{{report.total_completed}}</strong></div>
+  <div class="metric"><span>SLA вовремя</span><strong>{{report.team_sla}}%</strong></div>
+  <div class="metric"><span>Баллы выполненных работ</span><strong>{{report.total_points}}</strong></div>
+  <div class="metric kpi-leader-card"><span>Лидер месяца</span><strong>{% if report.leader %}{{report.leader.name}}{% else %}—{% endif %}</strong>{% if report.leader %}<small>{{report.leader.score}}% · {{report.leader.rating}} / 5</small>{% endif %}</div>
+</div>
+
+<section class="panel kpi-rating-panel">
+  <div class="panelhead"><div><h2>Рейтинг ремонтников</h2><p class="muted">Целевой объём: {{report.target_points}} баллов работ на месяц</p></div></div>
+  <table class="responsive-table kpi-table">
+    <thead><tr><th>Место</th><th>Ремонтник</th><th>KPI</th><th>Рейтинг</th><th>Выполнено</th><th>SLA</th><th>Закрытие</th><th>Баллы</th><th>Документация</th><th>Ср. время</th></tr></thead>
+    <tbody>
+    {% for x in report.rows %}
+      <tr class="{% if x.rank == 1 %}kpi-first{% elif not x.has_activity %}kpi-no-activity{% endif %}">
+        <td data-label="Место"><span class="rank-badge {% if x.rank and x.rank <= 3 %}top-{{x.rank}}{% endif %}">{% if x.rank == 1 %}🥇{% elif x.rank == 2 %}🥈{% elif x.rank == 3 %}🥉{% else %}{{x.rank or '—'}}{% endif %}</span></td>
+        <td data-label="Ремонтник"><b>{{x.name}}</b><small class="kpi-sub">@{{x.username}}</small></td>
+        <td data-label="KPI"><div class="kpi-score"><b>{{x.score}}%</b><div class="kpi-bar"><i style="width:{{x.score}}%"></i></div></div></td>
+        <td data-label="Рейтинг"><span class="kpi-rating">★ {{x.rating}}</span><small>/ 5</small></td>
+        <td data-label="Выполнено"><b>{{x.completed}}</b><small> из {{x.handled}} за период</small></td>
+        <td data-label="SLA"><span class="{% if x.sla_rate >= 90 %}good-text{% elif x.sla_rate < 70 and x.completed %}bad-text{% endif %}">{{x.sla_rate}}%</span>{% if x.overdue_completed %}<small>{{x.overdue_completed}} проср.</small>{% endif %}</td>
+        <td data-label="Закрытие">{{x.closure_rate}}%</td>
+        <td data-label="Баллы"><b>{{x.points}}</b><small>{{x.productivity_rate}}% цели</small></td>
+        <td data-label="Документация">{{x.documentation_rate}}%</td>
+        <td data-label="Ср. время">{% if x.completed %}{{x.avg_resolution_hours}} ч{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td class="empty-row" colspan="10">Нет активных пользователей с ролью «Техник»</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="grid2 kpi-bottom-grid">
+  <section class="panel">
+    <h2>Как считается KPI</h2>
+    <div class="kpi-formula-list">
+      <div><span><b>SLA</b> — выполнение заявок в срок</span><strong>{{(report.weights.sla*100)|round|int}}%</strong></div>
+      <div><span><b>Закрытие</b> — доля выполненных из заявок, попавших в работу за период</span><strong>{{(report.weights.closure*100)|round|int}}%</strong></div>
+      <div><span><b>Производительность</b> — набранные баллы относительно месячной цели</span><strong>{{(report.weights.productivity*100)|round|int}}%</strong></div>
+      <div><span><b>Документирование</b> — заполнен комментарий мастера в выполненных заявках</span><strong>{{(report.weights.documentation*100)|round|int}}%</strong></div>
+    </div>
+    <p class="muted kpi-note">Итоговый KPI ограничен диапазоном 0–100%. Рейтинг = KPI / 20, максимум 5,0.</p>
+  </section>
+  <section class="panel">
+    <h2>Баллы за выполненную заявку</h2>
+    <div class="kpi-points-grid">
+      <div><span>Низкий приоритет</span><b>0,75</b></div>
+      <div><span>Обычный</span><b>1,0</b></div>
+      <div><span>Высокий</span><b>1,5</b></div>
+      <div><span>Срочный</span><b>2,0</b></div>
+    </div>
+    <p class="muted kpi-note">Важно: текущая версия считает KPI по текущему исполнителю заявки. Если заявку переназначали между ремонтниками, история переназначений пока не распределяет вклад автоматически.</p>
+  </section>
+</div>
+{% endblock %}

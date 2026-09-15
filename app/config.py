@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.4.1"
+    app_version: str = "0.5.0"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
@@ -15,6 +15,13 @@ class Settings(BaseSettings):
     base_url: str = ""
     upload_dir: str = "./uploads"
     cookie_https_only: bool = False
+
+    # Monthly KPI / technician rating. The weights are normalized automatically.
+    kpi_monthly_target_points: float = 30.0
+    kpi_weight_sla: float = 0.40
+    kpi_weight_closure: float = 0.25
+    kpi_weight_productivity: float = 0.20
+    kpi_weight_documentation: float = 0.15
 
     # 1C -> Web webhook token. Use a long random value in production.
     onec_webhook_token: str = "change-me-1c-webhook-token"
