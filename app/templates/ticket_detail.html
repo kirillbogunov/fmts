@@ -1,21 +1,66 @@
 {% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">{{ticket.number}}</div><h1>{{ticket.title}}</h1><p>{{ticket.site.name}}{% if ticket.room %} · {{ticket.room}}{% endif %}{% if ticket.equipment %} · <a href="/equipment/{{ticket.equipment.id}}">{{ticket.equipment.name}}</a>{% endif %}</p></div><span class="badge big s-{{ticket.status}}" style="{{badge_style('status',ticket.status)}}">{{ui_name('status',ticket.status,status_labels.get(ticket.status,ticket.status))}}</span></div>
-<div class="grid2 wide-left">
+<div class="ticket-page">
+<div class="pagehead ticket-head"><div><div class="eyebrow">{{ticket.number}}</div><h1>{{ticket.title}}</h1><p>{{ticket.site.name}}{% if ticket.room %} · {{ticket.room}}{% endif %}{% if ticket.equipment %} · <a href="/equipment/{{ticket.equipment.id}}">{{ticket.equipment.name}}</a>{% endif %}</p></div><span class="badge big s-{{ticket.status}}" style="{{badge_style('status',ticket.status)}}">{{ui_name('status',ticket.status,status_labels.get(ticket.status,ticket.status))}}</span></div>
+
+<section class="ticket-location-card">
+  <div class="location-icon">⌖</div>
+  <div class="location-main">
+    <span class="location-kicker">ОБЪЕКТ</span>
+    <strong>{{ticket.site.name}}</strong>
+    <p>{{ticket.site.address or 'Адрес объекта не указан'}}</p>
+    {% if ticket.room %}<small>Зона / помещение: {{ticket.room}}</small>{% endif %}
+  </div>
+  <div class="location-actions">
+    {% if ticket.site.address %}<button class="btn primary route-btn" type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'>🗺 Маршрут до объекта</button>{% else %}<button class="btn route-btn" type="button" disabled title="Заполните адрес в карточке объекта">🗺 Маршрут не задан</button>{% endif %}
+    {% if ticket.requester_phone %}<a class="btn" href="tel:{{ticket.requester_phone|replace(' ','')|replace('(','')|replace(')','')|replace('-','')}}">☎ Позвонить</a>{% endif %}
+    {% if ticket.site.address %}<button class="btn" type="button" onclick='copyText({{ ticket.site.address|tojson }}, this)'>⧉ Скопировать адрес</button>{% endif %}
+  </div>
+</section>
+
+<div class="ticket-summary-mobile">
+  <div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div>
+  <div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m %H:%M') if ticket.sla_due_at else '—'}}</b></div>
+  <div><span>Исполнитель</span><b>{{ticket.assignee.full_name if ticket.assignee else (ticket.master_name or 'Не назначен')}}</b></div>
+</div>
+
+<div class="grid2 wide-left ticket-grid">
 <div>
 <section class="panel"><h2>Описание</h2><p class="pre">{{ticket.description or 'Описание не указано'}}</p>
-<div class="facts two"><div><span>Заявитель</span><b>{{ticket.requester_name or (ticket.requester.full_name if ticket.requester else '—')}}</b></div><div><span>Телефон</span><b>{{ticket.requester_phone or '—'}}</b></div>{% if settings.onec_enabled %}<div><span>1С GUID</span><b>{{ticket.one_c_id or '—'}}</b></div><div><span>Синхронизация 1С</span><b>{% if ticket.onec_sync_error %}Ошибка: {{ticket.onec_sync_error}}{% elif ticket.onec_synced_at %}{{ticket.onec_synced_at.strftime('%d.%m.%Y %H:%M')}}{% else %}—{% endif %}</b></div>{% endif %}</div>
+<div class="facts two"><div><span>Заявитель</span><b>{{ticket.requester_name or (ticket.requester.full_name if ticket.requester else '—')}}</b></div><div><span>Телефон</span><b>{% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')}}">{{ticket.requester_phone}}</a>{% else %}—{% endif %}</b></div>{% if settings.onec_enabled %}<div><span>1С GUID</span><b>{{ticket.one_c_id or '—'}}</b></div><div><span>Синхронизация 1С</span><b>{% if ticket.onec_sync_error %}Ошибка: {{ticket.onec_sync_error}}{% elif ticket.onec_synced_at %}{{ticket.onec_synced_at.strftime('%d.%m.%Y %H:%M')}}{% else %}—{% endif %}</b></div>{% endif %}</div>
 {% if ticket.attachments %}<div class="files">{% for f in ticket.attachments %}<a href="/uploads/{{f.stored_name}}" target="_blank">📎 {{f.filename}}</a>{% endfor %}</div>{% endif %}</section>
-<section class="panel"><h2>История и комментарии</h2>{% for c in ticket.comments %}<div class="comment"><b>{{c.user.full_name if c.user else 'Система'}}</b><time>{{c.created_at.strftime('%d.%m.%Y %H:%M')}}</time><p>{{c.body}}</p></div>{% else %}<p class="muted">Комментариев пока нет.</p>{% endfor %}<form method="post" action="/tickets/{{ticket.id}}/comment"><textarea name="body" rows="3" required placeholder="Комментарий по работе"></textarea><button class="btn primary">Добавить</button></form></section>
+<section class="panel" id="ticket-comments"><h2>История и комментарии</h2>{% for c in ticket.comments %}<div class="comment"><b>{{c.user.full_name if c.user else 'Система'}}</b><time>{{c.created_at.strftime('%d.%m.%Y %H:%M')}}</time><p>{{c.body}}</p></div>{% else %}<p class="muted">Комментариев пока нет.</p>{% endfor %}<form method="post" action="/tickets/{{ticket.id}}/comment" class="comment-form"><textarea name="body" rows="3" required placeholder="Комментарий по работе"></textarea><button class="btn primary">Добавить комментарий</button></form></section>
 </div>
 <div>
-<section class="panel"><h2>Управление</h2><form method="post" action="/tickets/{{ticket.id}}/update" class="form compact">
+<section class="panel" id="ticket-control"><h2>Управление</h2><form method="post" action="/tickets/{{ticket.id}}/update" class="form compact">
 <label>Статус<select name="status">{% for x in status_options %}<option value="{{x.code}}" {% if ticket.status==x.code %}selected{% endif %}>{{x.name}}</option>{% endfor %}</select></label>
 <label>Исполнитель<select name="assignee_id"><option value="">Не назначен</option>{% for x in users %}<option value="{{x.id}}" {% if ticket.assignee_id==x.id %}selected{% endif %}>{{x.full_name}}</option>{% endfor %}</select></label>
 <label>Подрядчик<select name="contractor_id"><option value="">Без подрядчика</option>{% for x in contractors %}<option value="{{x.id}}" {% if ticket.contractor_id==x.id %}selected{% endif %}>{{x.name}}</option>{% endfor %}</select></label>
 <label>Комментарий мастера<textarea name="master_comment" rows="3">{{ticket.master_comment or ''}}</textarea></label>
-<label>Стоимость работ, ₸<input type="number" step="0.01" name="labor_cost" value="{{ticket.labor_cost}}"></label><button class="btn primary">Сохранить</button></form>
+<label>Стоимость работ, ₸<input type="number" step="0.01" name="labor_cost" inputmode="decimal" value="{{ticket.labor_cost}}"></label><button class="btn primary">Сохранить изменения</button></form>
 {% if settings.onec_enabled and (ticket.one_c_id or ticket.onec_sync_error) %}<form method="post" action="/api/integration/1c/push/tickets/{{ticket.id}}" style="margin-top:10px"><button class="btn">Отправить в 1С</button></form>{% endif %}</section>
-<section class="panel"><h2>ЗИП / материалы</h2><form method="post" action="/tickets/{{ticket.id}}/stock" class="form compact"><label>Позиция<select name="item_id">{% for x in inventory %}<option value="{{x.id}}">{{x.name}} — {{x.qty}} {{x.unit}}</option>{% endfor %}</select></label><label>Количество<input type="number" step="0.001" min="0.001" name="qty" required></label><button class="btn">Списать в заявку</button></form></section>
-<section class="panel facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div><div><span>Затраты</span><b>{{ (ticket.labor_cost or 0) + (ticket.parts_cost or 0) }} ₸</b></div></section>
+<section class="panel"><h2>ЗИП / материалы</h2><form method="post" action="/tickets/{{ticket.id}}/stock" class="form compact"><label>Позиция<select name="item_id">{% for x in inventory %}<option value="{{x.id}}">{{x.name}} — {{x.qty}} {{x.unit}}</option>{% endfor %}</select></label><label>Количество<input type="number" step="0.001" min="0.001" inputmode="decimal" name="qty" required></label><button class="btn">Списать в заявку</button></form></section>
+<section class="panel facts ticket-facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div><div><span>Затраты</span><b>{{ (ticket.labor_cost or 0) + (ticket.parts_cost or 0) }} ₸</b></div></section>
 </div></div>
+
+<div class="ticket-action-dock" aria-label="Быстрые действия по заявке">
+  {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span>🗺</span><small>Маршрут</small></button>{% else %}<button type="button" disabled><span>🗺</span><small>Нет адреса</small></button>{% endif %}
+  {% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')|replace('(','')|replace(')','')|replace('-','')}}"><span>☎</span><small>Позвонить</small></a>{% else %}<a href="#ticket-control"><span>⚙</span><small>Управление</small></a>{% endif %}
+  <a href="#ticket-comments"><span>✎</span><small>Комментарий</small></a>
+</div>
+<div class="ticket-mobile-spacer"></div>
+
+<div id="route-picker" class="route-picker" role="dialog" aria-modal="true" aria-labelledby="route-title" onclick="if(event.target===this) closeRoutePicker()">
+  <div class="route-sheet">
+    <div class="route-sheet-handle"></div>
+    <button class="route-close" type="button" aria-label="Закрыть" onclick="closeRoutePicker()">×</button>
+    <span class="location-kicker">МАРШРУТ</span><h2 id="route-title">Открыть навигатор</h2>
+    <p id="route-address" class="muted"></p>
+    <div class="route-apps">
+      <a id="route-yandex" class="route-app" href="#" target="_blank" rel="noopener"><span>Я</span><b>Яндекс Карты</b><small>Маршрут от текущей позиции</small></a>
+      <a id="route-google" class="route-app" href="#" target="_blank" rel="noopener"><span>G</span><b>Google Maps</b><small>Маршрут до объекта</small></a>
+      <a id="route-2gis" class="route-app" href="#" target="_blank" rel="noopener"><span>2</span><b>2GIS</b><small>Найти объект по адресу</small></a>
+    </div>
+  </div>
+</div>
+</div>
 {% endblock %}

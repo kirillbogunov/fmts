@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=yes">
 <title>{% block title %}{{ app_name }}{% endblock %}</title>
 <meta name="theme-color" content="#0f172a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -11,26 +11,31 @@
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="icon" href="/static/icon-192.png">
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
 </head>
 <body class="{% if user %}app-body{% else %}anonymous-body{% endif %}">
 {% if user %}
-<div class="mobile-topbar"><button class="mobile-menu-btn" type="button" onclick="document.body.classList.toggle('menu-open')">☰</button><b>{{ app_name }}</b><button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button></div>
+{% set path = request.url.path %}
+<div class="mobile-topbar">
+  <button class="mobile-menu-btn" type="button" aria-label="Открыть меню" onclick="document.body.classList.toggle('menu-open')">☰</button>
+  <a class="mobile-brand" href="/"><b>{{ app_name }}</b><small>ТОиР</small></a>
+  <button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button>
+</div>
 <div class="layout">
 <aside class="sidebar" id="sidebar">
   <div class="brand"><span>⚙</span><div><b>{{ app_name }}</b><small>Facility Management & Task System</small></div></div>
   <nav>
-    <a href="/" class="navitem">▦ <span>Дашборд</span></a>
-    <a href="/tickets" class="navitem">☑ <span>Заявки</span></a>
-    <a href="/sites" class="navitem">⌂ <span>Объекты</span></a>
-    <a href="/equipment" class="navitem">▣ <span>Оборудование</span></a>
-    <a href="/maintenance" class="navitem">↻ <span>ТО / ППР</span></a>
-    <a href="/inventory" class="navitem">▤ <span>Склад / ЗИП</span></a>
-    <a href="/contractors" class="navitem">◉ <span>Подрядчики</span></a>
-    <a href="/integration" class="navitem">⇄ <span>Интеграции</span></a>
-    {% if user.role == 'admin' %}<a href="/settings/reference-data" class="navitem">⚙ <span>Настройки</span></a><a href="/users" class="navitem">♙ <span>Пользователи</span></a>{% endif %}
+    <a href="/" class="navitem {% if path == '/' %}active{% endif %}">▦ <span>Дашборд</span></a>
+    <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}">☑ <span>Заявки</span></a>
+    <a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}">⌂ <span>Объекты</span></a>
+    <a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}">▣ <span>Оборудование</span></a>
+    <a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}">↻ <span>ТО / ППР</span></a>
+    <a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}">▤ <span>Склад / ЗИП</span></a>
+    <a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}">◉ <span>Подрядчики</span></a>
+    <a href="/integration" class="navitem {% if path.startswith('/integration') %}active{% endif %}">⇄ <span>Интеграции</span></a>
+    {% if user.role == 'admin' %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}">⚙ <span>Настройки</span></a><a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}">♙ <span>Пользователи</span></a>{% endif %}
     <a href="/docs" class="navitem">API <span>REST API</span></a>
-    <a href="/about" class="navitem">ⓘ <span>О программе</span></a>
+    <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}">ⓘ <span>О программе</span></a>
   </nav>
   <button id="installPwa" class="navitem install-nav" type="button" hidden>▣ <span>Установить приложение</span></button>
   <div class="userbox"><div><b>{{ user.full_name }}</b><small>{{ role_labels.get(user.role, user.role) }}</small></div><div><a href="/profile">Профиль</a> · <a href="/logout">Выйти</a></div></div>
@@ -43,6 +48,13 @@
   <span>{{ app_name }} v{{ app_version }}</span>
 </footer></main>
 </div>
+<nav class="mobile-bottom-nav" aria-label="Основная навигация">
+  <a href="/" class="{% if path == '/' %}active{% endif %}"><span>⌂</span><small>Главная</small></a>
+  <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>Заявки</small></a>
+  <a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>
+  <a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>ППР</small></a>
+  <a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>Профиль</small></a>
+</nav>
 {% else %}{% block anonymous %}{% endblock %}
 <footer class="public-footer">Разработчик: <b>{{ developer_name }}</b> © 2026 · Telegram: <a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></footer>{% endif %}
 <script>
@@ -57,5 +69,24 @@ window.addEventListener('beforeinstallprompt', e => {
 async function installPwa(){ if(!deferredInstallPrompt) return; deferredInstallPrompt.prompt(); await deferredInstallPrompt.userChoice; deferredInstallPrompt=null; }
 for (const id of ['installPwa','installPwaTop']) { const b=document.getElementById(id); if (b) b.addEventListener('click', installPwa); }
 document.querySelectorAll('.sidebar a').forEach(a => a.addEventListener('click', () => document.body.classList.remove('menu-open')));
+window.copyText = async function(text, button){
+  try {
+    await navigator.clipboard.writeText(text);
+    if(button){ const old=button.innerHTML; button.innerHTML='✓ Скопировано'; setTimeout(()=>button.innerHTML=old,1600); }
+  } catch(e) {
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  }
+};
+window.openRoutePicker = function(address){
+  const modal=document.getElementById('route-picker'); if(!modal || !address) return;
+  const q=encodeURIComponent(address);
+  document.getElementById('route-google').href='https://www.google.com/maps/dir/?api=1&destination='+q;
+  document.getElementById('route-yandex').href='https://yandex.ru/maps/?rtext=~'+q+'&rtt=auto';
+  document.getElementById('route-2gis').href='https://2gis.ru/search/'+q;
+  const label=document.getElementById('route-address'); if(label) label.textContent=address;
+  modal.classList.add('open'); document.body.classList.add('modal-open');
+};
+window.closeRoutePicker = function(){ const modal=document.getElementById('route-picker'); if(modal) modal.classList.remove('open'); document.body.classList.remove('modal-open'); };
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeRoutePicker(); });
 </script>
 </body></html>

@@ -12,6 +12,6 @@
 <label>Исполнитель<select name="assignee_id"><option value="">Назначить позже</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label>
 </div>
 <label>Описание<textarea name="description" rows="6" placeholder="Что произошло, где находится оборудование, дополнительные детали"></textarea></label>
-<label>Фото / файл<input type="file" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"></label>
+<label>Фото / файл<input type="file" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><small class="field-hint">На телефоне можно сразу выбрать снимок с камеры или галереи.</small></label>
 <div class="actions"><a class="btn" href="/tickets">Отмена</a><button class="btn primary">Создать заявку</button></div></form>
 {% endblock %}
