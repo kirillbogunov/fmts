@@ -48,7 +48,7 @@
 оборудование и пользователи добавляются через интерфейс.
 
 > Для локального HTTP в `.env` должно быть `COOKIE_HTTPS_ONLY=false`.
-> После публикации через HTTPS установите `COOKIE_HTTPS_ONLY=true` и правильный `BASE_URL`.
+> После публикации через HTTPS установите `COOKIE_HTTPS_ONLY=true` и правильный `PUBLIC_BASE_URL`.
 
 ## Демо-режим
 
@@ -67,7 +67,7 @@ run_demo_windows.bat
 
 1. Скопируйте `.env.example` в `.env`.
 2. Измените `SECRET_KEY`, `INITIAL_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`.
-3. При внешнем HTTPS укажите `BASE_URL` и `COOKIE_HTTPS_ONLY=true`.
+3. При внешнем HTTPS укажите `PUBLIC_BASE_URL` и `COOKIE_HTTPS_ONLY=true`.
 4. Запустите:
 
 ```bash
@@ -164,3 +164,14 @@ pytest -q
 
 **Разработчик: Кирилл Вадимович Богунов © 2026**  
 Telegram: [@kirill_bogunov](https://t.me/kirill_bogunov)
+
+### QR-коды и публичный адрес
+
+FMTS v0.4.1 больше не зашивает `127.0.0.1:8000` в QR-коды. Для Render задайте переменную окружения:
+
+```env
+PUBLIC_BASE_URL=https://fmts-demo.onrender.com
+```
+
+Если `PUBLIC_BASE_URL` не задан, FMTS сначала попробует `RENDER_EXTERNAL_URL`, затем старый `BASE_URL`, а после этого определит адрес из текущего HTTP-запроса. Для стабильных напечатанных QR-кодов в production рекомендуется всегда задавать `PUBLIC_BASE_URL`.
+

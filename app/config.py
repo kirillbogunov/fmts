@@ -3,13 +3,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.4.0"
+    app_version: str = "0.4.1"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
     secret_key: str = "change-me"
     database_url: str = "sqlite:///./toir.db"
-    base_url: str = "http://127.0.0.1:8000"
+    # Public URL used by QR codes and external links. Set PUBLIC_BASE_URL in production.
+    public_base_url: str = ""
+    # Backwards-compatible legacy setting. If empty, the current request host is used.
+    base_url: str = ""
     upload_dir: str = "./uploads"
     cookie_https_only: bool = False
 

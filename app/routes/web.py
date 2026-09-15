@@ -20,6 +20,7 @@ from app.services.sync import push_ticket_to_1c
 from app.labels import STATUS_LABELS, PRIORITY_LABELS, ROLE_LABELS, EQUIPMENT_STATUS_LABELS
 from app.services.ui_styles import styles_cache, badge_css, display_name, options_for, sla_hours_for
 from app.services.reference_data import ensure_default_reference_data
+from app.services.urls import public_url
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -209,7 +210,7 @@ def equipment_detail(equipment_id:int,request:Request,db:Session=Depends(get_db)
 def equipment_qr(equipment_id:int,request:Request,db:Session=Depends(get_db)):
     eq=db.get(Equipment,equipment_id)
     if not eq: return Response(status_code=404)
-    url=f"{settings.base_url.rstrip('/')}/scan/{eq.qr_token}"
+    url=public_url(request, settings, f"/scan/{eq.qr_token}")
     img=qrcode.make(url); bio=BytesIO(); img.save(bio,format="PNG")
     return Response(bio.getvalue(),media_type="image/png")
 
