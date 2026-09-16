@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead attachment-head"><div><div class="eyebrow">ВЛОЖЕНИЕ · {{ticket.number}}</div><h1>{{attachment.filename}}</h1><p>Открыто в защищённом просмотрщике FMTS</p></div><div class="attachment-head-actions"><a class="btn" href="/tickets/{{ticket.id}}#ticket-comments">← К заявке</a><a class="btn" href="/attachments/{{attachment.id}}/download">↓ Скачать</a></div></div>
+<section class="panel attachment-viewer">
+{% if kind == 'image' %}
+  <a href="/attachments/{{attachment.id}}/raw" target="_blank" rel="noopener"><img class="attachment-full-image" src="/attachments/{{attachment.id}}/raw" alt="{{attachment.filename}}"></a>
+{% elif kind == 'pdf' %}
+  <iframe class="attachment-frame" src="/attachments/{{attachment.id}}/raw" title="{{attachment.filename}}"></iframe>
+{% elif kind == 'text' %}
+  <iframe class="attachment-frame text-frame" src="/attachments/{{attachment.id}}/raw" title="{{attachment.filename}}"></iframe>
+{% else %}
+  <div class="attachment-unsupported"><div class="attachment-doc-icon">▤</div><h2>{{attachment.filename}}</h2><p>Этот формат браузер не умеет безопасно показывать внутри FMTS. Файл не скачивается автоматически — при необходимости используйте кнопку «Скачать».</p><small>{{mime}}</small></div>
+{% endif %}
+</section>
+{% endblock %}

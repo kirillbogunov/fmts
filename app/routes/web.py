@@ -1,6 +1,7 @@
 from __future__ import annotations
-import csv, io, json, os, secrets
+import base64, csv, io, json, mimetypes, os, secrets, textwrap
 from datetime import datetime, date, timedelta
+from html import escape as html_escape
 from pathlib import Path
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Request, Form, UploadFile, File
@@ -23,12 +24,74 @@ from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
 from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time
+from app.services.materials import ticket_material_summary, recalc_ticket_parts_cost, as_money
 from app.access import has_permission, scope_ticket_query, can_view_ticket, can_comment_ticket, can_issue_stock, can_track_ticket_time, allowed_statuses, can_change_ticket_status, visible_navigation, role_summary
 from app.services.audit import audit
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
 settings=get_settings()
+
+SAFE_INLINE_MIMES = {
+    "image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/heic", "image/heif",
+    "application/pdf", "text/plain", "text/csv",
+}
+
+def attachment_mime(filename: str) -> str:
+    mime = mimetypes.guess_type(filename or "")[0] or "application/octet-stream"
+    # SVG/HTML/XML are intentionally not rendered inline under the authenticated
+    # application origin because active content could execute in the FMTS session.
+    if mime in {"image/svg+xml", "text/html", "application/xhtml+xml", "application/xml", "text/xml"}:
+        return "application/octet-stream"
+    return mime
+
+def attachment_kind(filename: str) -> str:
+    mime = attachment_mime(filename)
+    if mime.startswith("image/"): return "image"
+    if mime == "application/pdf": return "pdf"
+    if mime.startswith("text/"): return "text"
+    if mime.startswith("video/"): return "video"
+    if mime.startswith("audio/"): return "audio"
+    return "document"
+
+def _attachment_path(attachment: Attachment) -> Path | None:
+    path=(Path(settings.upload_dir)/attachment.stored_name).resolve()
+    root=Path(settings.upload_dir).resolve()
+    if root not in path.parents or not path.exists():
+        return None
+    return path
+
+def _prepare_comment_photo(upload: UploadFile) -> tuple[str, str, bytes]:
+    filename=Path(upload.filename or "photo.jpg").name[:255]
+    content_type=(upload.content_type or mimetypes.guess_type(filename)[0] or "").lower()
+    if not content_type.startswith("image/") or content_type in {"image/svg+xml"}:
+        raise ValueError("К комментарию можно прикреплять только фотографии")
+    max_bytes=max(1,settings.comment_photo_max_mb)*1024*1024
+    data=upload.file.read(max_bytes+1)
+    if len(data)>max_bytes:
+        raise ValueError(f"Фото превышает {settings.comment_photo_max_mb} МБ")
+    if not data:
+        raise ValueError("Пустой файл")
+    ext=Path(filename).suffix.lower()
+    if len(ext)>10 or not ext:
+        ext=mimetypes.guess_extension(content_type) or ".jpg"
+    stored=f"{secrets.token_hex(16)}{ext}"
+    return filename,stored,data
+
+def _qr_png_bytes(url: str) -> bytes:
+    qr=qrcode.QRCode(version=None,error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=12,border=2)
+    qr.add_data(url); qr.make(fit=True)
+    img=qr.make_image(fill_color="#0f172a",back_color="white")
+    bio=BytesIO(); img.save(bio,format="PNG")
+    return bio.getvalue()
+
+def _wrap_label(text: str, width: int, lines: int=2) -> list[str]:
+    raw=" ".join((text or "—").split())
+    out=textwrap.wrap(raw,width=width,break_long_words=False,break_on_hyphens=False) or ["—"]
+    if len(out)>lines:
+        out=out[:lines]
+        out[-1]=(out[-1][:-1]+"…") if len(out[-1])>1 else out[-1]+"…"
+    return out
 
 def user_or_login(request:Request, db:Session):
     return current_user(request,db)
@@ -45,6 +108,7 @@ def ctx(request, db, **extra):
           "badge_style":lambda kind,code: badge_css(ui,kind,code),
           "ui_name":lambda kind,code,fallback=None: display_name(ui,kind,code,fallback),
           "format_duration":format_duration,
+          "attachment_kind":attachment_kind,
           "can":lambda permission: bool(u and has_permission(u,permission)),
           "nav":visible_navigation(u),
           "role_summary":role_summary}
@@ -269,9 +333,12 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     allowed=allowed_statuses(u,t)
     status_options=[x for x in options_for(db,"status",list(STATUS_LABELS.items())) if x.get("code") in allowed]
     technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.assign") else []
+    materials=ticket_material_summary(db,t.id) if has_permission(u,"ticket.materials.view") else {"rows":[],"total":Decimal("0.00"),"count":0}
+    total_cost=as_money(t.labor_cost)+as_money(materials["total"])
     return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,work_time=work_time,active_session=active_session,
         can_track=can_track_ticket_time(u,t),users=technicians,contractors=db.query(Contractor).order_by(Contractor.name).all() if has_permission(u,"contractor.view") or has_permission(u,"ticket.contractor") else [],
-        inventory=db.query(InventoryItem).order_by(InventoryItem.name).all() if has_permission(u,"inventory.view") else [],status_options=status_options))
+        inventory=db.query(InventoryItem).order_by(InventoryItem.name).all() if has_permission(u,"inventory.view") else [],status_options=status_options,
+        materials=materials,total_cost=total_cost))
 
 @router.post("/tickets/{ticket_id}/update")
 def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),db:Session=Depends(get_db)):
@@ -413,15 +480,42 @@ def ticket_time_delete(ticket_id:int,entry_id:int,request:Request,db:Session=Dep
     return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
 
 @router.post("/tickets/{ticket_id}/comment")
-def ticket_comment(ticket_id:int,request:Request,body:str=Form(...),db:Session=Depends(get_db)):
+def ticket_comment(ticket_id:int,request:Request,body:str=Form(""),photos:list[UploadFile]|None=File(None),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if not can_comment_ticket(u,t):
         return forbidden(request,db,u,"ticket.comment")
-    db.add(TicketComment(ticket_id=ticket_id,user_id=u.id,body=body)); db.commit()
-    audit(db,request,u,"ticket.comment",entity_type="ticket",entity_id=ticket_id,details=(body or "")[:250])
-    return RedirectResponse(f"/tickets/{ticket_id}",303)
+    uploads=[x for x in (photos or []) if x and x.filename]
+    if len(uploads)>settings.comment_photo_max_count:
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.comment",message=f"К одному комментарию можно прикрепить не более {settings.comment_photo_max_count} фото"),status_code=400)
+    prepared=[]
+    try:
+        for upload in uploads:
+            prepared.append(_prepare_comment_photo(upload))
+    except ValueError as exc:
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.comment",message=str(exc)),status_code=400)
+    text=(body or "").strip()
+    if not text and not prepared:
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.comment",message="Добавьте текст комментария или фотографию"),status_code=400)
+    comment=TicketComment(ticket_id=ticket_id,user_id=u.id,body=text)
+    db.add(comment); db.flush()
+    created_paths=[]
+    try:
+        Path(settings.upload_dir).mkdir(parents=True,exist_ok=True)
+        for filename,stored,data in prepared:
+            target=Path(settings.upload_dir)/stored
+            target.write_bytes(data); created_paths.append(target)
+            db.add(Attachment(ticket_id=ticket_id,comment_id=comment.id,filename=filename,stored_name=stored))
+        db.commit()
+    except Exception:
+        db.rollback()
+        for path in created_paths:
+            try: path.unlink(missing_ok=True)
+            except Exception: pass
+        raise
+    audit(db,request,u,"ticket.comment",entity_type="ticket",entity_id=ticket_id,details=f"{text[:200]}; photos={len(prepared)}")
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-comments",303)
 
 @router.post("/tickets/{ticket_id}/stock")
 def ticket_stock(ticket_id:int,request:Request,item_id:int=Form(...),qty:float=Form(...),db:Session=Depends(get_db)):
@@ -432,23 +526,78 @@ def ticket_stock(ticket_id:int,request:Request,item_id:int=Form(...),qty:float=F
         return forbidden(request,db,u,"ticket.stock.issue","Списание материалов доступно назначенному технику или диспетчеру по доступной заявке")
     if not item or qty<=0 or item.qty < qty:
         return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.stock.issue",message="Недостаточный остаток или некорректное количество"),status_code=400)
-    item.qty-=qty; db.add(StockMovement(item_id=item.id,ticket_id=t.id,movement_type="issue",qty=-qty,comment=f"Списание в {t.number}")); t.parts_cost=Decimal(str(float(t.parts_cost or 0)+qty*float(item.unit_cost or 0))); db.commit(); db.refresh(t)
-    audit(db,request,u,"stock.issue",entity_type="ticket",entity_id=t.id,details=f"item={item.sku}; qty={qty}")
+    unit_cost=as_money(item.unit_cost)
+    amount=(Decimal(str(qty))*unit_cost).quantize(Decimal("0.01"))
+    item.qty-=qty
+    db.add(StockMovement(
+        item_id=item.id,
+        ticket_id=t.id,
+        movement_type="issue",
+        qty=-qty,
+        unit_cost_snapshot=unit_cost,
+        amount=amount,
+        issued_by_id=u.id,
+        comment=f"Списание в {t.number}",
+    ))
+    db.flush()
+    recalc_ticket_parts_cost(db,t)
+    db.commit(); db.refresh(t)
+    audit(db,request,u,"stock.issue",entity_type="ticket",entity_id=t.id,details=f"item={item.sku}; qty={qty}; unit_cost={unit_cost}; amount={amount}")
     push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
 
+def _visible_attachment(attachment_id:int, user:User, db:Session) -> tuple[Attachment|None, Ticket|None]:
+    attachment=db.get(Attachment,attachment_id)
+    if not attachment: return None,None
+    ticket=db.get(Ticket,attachment.ticket_id)
+    if not can_view_ticket(user,ticket): return attachment,None
+    return attachment,ticket
+
+@router.get("/attachments/{attachment_id}", response_class=HTMLResponse)
+def attachment_view(attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse(f"/login?next=/attachments/{attachment_id}",303)
+    attachment,ticket=_visible_attachment(attachment_id,u,db)
+    if not attachment: return Response(status_code=404)
+    if not ticket: return forbidden(request,db,u,"ticket.attachment.view")
+    if not _attachment_path(attachment): return Response(status_code=404)
+    return templates.TemplateResponse("attachment_view.html",ctx(request,db,attachment=attachment,ticket=ticket,kind=attachment_kind(attachment.filename),mime=attachment_mime(attachment.filename)))
+
+@router.get("/attachments/{attachment_id}/raw")
+def attachment_raw(attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return Response(status_code=401)
+    attachment,ticket=_visible_attachment(attachment_id,u,db)
+    if not attachment: return Response(status_code=404)
+    if not ticket: return Response(status_code=403)
+    path=_attachment_path(attachment)
+    if not path: return Response(status_code=404)
+    mime=attachment_mime(attachment.filename)
+    inline_type=mime if mime in SAFE_INLINE_MIMES else "application/octet-stream"
+    return FileResponse(str(path),filename=attachment.filename,media_type=inline_type,content_disposition_type="inline")
+
+@router.get("/attachments/{attachment_id}/download")
+def attachment_download(attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return Response(status_code=401)
+    attachment,ticket=_visible_attachment(attachment_id,u,db)
+    if not attachment: return Response(status_code=404)
+    if not ticket: return Response(status_code=403)
+    path=_attachment_path(attachment)
+    if not path: return Response(status_code=404)
+    return FileResponse(str(path),filename=attachment.filename,media_type=attachment_mime(attachment.filename),content_disposition_type="attachment")
+
 @router.get("/uploads/{stored_name}")
 def protected_upload(stored_name:str,request:Request,db:Session=Depends(get_db)):
+    # Compatibility route for old links: opening a file now goes through the
+    # protected preview page instead of forcing an immediate download.
     u=user_or_login(request,db)
     if not u: return RedirectResponse(f"/login?next=/uploads/{stored_name}",303)
     attachment=db.query(Attachment).filter(Attachment.stored_name==stored_name).first()
     if not attachment: return Response(status_code=404)
     ticket=db.get(Ticket,attachment.ticket_id)
     if not can_view_ticket(u,ticket): return forbidden(request,db,u,"ticket.attachment.view")
-    path=(Path(settings.upload_dir)/attachment.stored_name).resolve()
-    root=Path(settings.upload_dir).resolve()
-    if root not in path.parents or not path.exists(): return Response(status_code=404)
-    return FileResponse(str(path),filename=attachment.filename)
+    return RedirectResponse(f"/attachments/{attachment.id}",302)
 
 @router.get("/sites", response_class=HTMLResponse)
 def sites_page(request:Request,db:Session=Depends(get_db)):
@@ -516,8 +665,59 @@ def equipment_qr(equipment_id:int,request:Request,db:Session=Depends(get_db)):
     eq=db.get(Equipment,equipment_id)
     if not eq: return Response(status_code=404)
     url=public_url(request, settings, f"/scan/{eq.qr_token}")
-    img=qrcode.make(url); bio=BytesIO(); img.save(bio,format="PNG")
-    return Response(bio.getvalue(),media_type="image/png")
+    return Response(_qr_png_bytes(url),media_type="image/png",headers={"Cache-Control":"no-store"})
+
+@router.get("/equipment/{equipment_id}/label.svg")
+def equipment_label_svg(equipment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return Response(status_code=401)
+    if not has_permission(u,"equipment.view"): return Response(status_code=403)
+    eq=db.get(Equipment,equipment_id)
+    if not eq: return Response(status_code=404)
+    url=public_url(request, settings, f"/scan/{eq.qr_token}")
+    qr64=base64.b64encode(_qr_png_bytes(url)).decode("ascii")
+    name_lines=_wrap_label(eq.name,30,2)
+    site_lines=_wrap_label(eq.site.name if eq.site else "Объект не указан",38,2)
+    name_svg="".join(f'<text x="390" y="{150+i*50}" text-anchor="middle" class="equipment">{html_escape(line)}</text>' for i,line in enumerate(name_lines))
+    site_y=255 if len(name_lines)>1 else 220
+    site_svg="".join(f'<text x="390" y="{site_y+i*30}" text-anchor="middle" class="site">{html_escape(line)}</text>' for i,line in enumerate(site_lines))
+    inv_y=site_y+len(site_lines)*30+18
+    qr_y=inv_y+72
+    footer_y=qr_y+488
+    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="780" height="980" viewBox="0 0 780 980">
+      <style>
+        .brand{{font:700 28px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#fff;letter-spacing:2px}}
+        .equipment{{font:800 38px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#111827}}
+        .site{{font:650 24px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#475569}}
+        .inv-label{{font:700 17px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#64748b;letter-spacing:1.8px}}
+        .inv{{font:800 29px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#0f172a}}
+        .small{{font:600 18px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#64748b}}
+      </style>
+      <rect x="8" y="8" width="764" height="964" rx="34" fill="#fff" stroke="#cbd5e1" stroke-width="4"/>
+      <rect x="8" y="8" width="764" height="92" rx="34" fill="#0f172a"/>
+      <path d="M8 72h764v28H8z" fill="#0f172a"/>
+      <text x="42" y="65" class="brand">FMTS</text>
+      <text x="738" y="61" text-anchor="end" style="font:600 18px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#cbd5e1">ЭТИКЕТКА ОБОРУДОВАНИЯ</text>
+      {name_svg}
+      {site_svg}
+      <rect x="178" y="{inv_y}" width="424" height="58" rx="29" fill="#eff6ff" stroke="#bfdbfe"/>
+      <text x="390" y="{inv_y+20}" text-anchor="middle" class="inv-label">ИНВЕНТАРНЫЙ №</text>
+      <text x="390" y="{inv_y+49}" text-anchor="middle" class="inv">{html_escape(eq.inventory_no)}</text>
+      <rect x="178" y="{qr_y}" width="424" height="424" rx="28" fill="#fff" stroke="#e2e8f0" stroke-width="3"/>
+      <image href="data:image/png;base64,{qr64}" x="194" y="{qr_y+16}" width="392" height="392"/>
+      <text x="390" y="{qr_y+456}" text-anchor="middle" class="small">Сканируйте QR для заявки по оборудованию</text>
+      <text x="390" y="{footer_y}" text-anchor="middle" style="font:500 15px -apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fill:#94a3b8">{html_escape(eq.site.address if eq.site and eq.site.address else 'FMTS • Facility Management & Task System')}</text>
+    </svg>'''
+    return Response(svg,media_type="image/svg+xml",headers={"Cache-Control":"no-store"})
+
+@router.get("/equipment/{equipment_id}/label/print", response_class=HTMLResponse)
+def equipment_label_print(equipment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse(f"/login?next=/equipment/{equipment_id}/label/print",303)
+    if not has_permission(u,"equipment.view"): return forbidden(request,db,u,"equipment.view")
+    eq=db.get(Equipment,equipment_id)
+    if not eq: return Response(status_code=404)
+    return templates.TemplateResponse("equipment_label_print.html",ctx(request,db,eq=eq))
 
 @router.get("/scan/{token}")
 def scan_equipment(token:str,request:Request,db:Session=Depends(get_db)):

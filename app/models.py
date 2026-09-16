@@ -89,15 +89,18 @@ class TicketComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ticket: Mapped[Ticket] = relationship(back_populates="comments")
     user: Mapped[User | None] = relationship()
+    attachments: Mapped[list[Attachment]] = relationship(back_populates="comment")
 
 class Attachment(Base):
     __tablename__ = "attachments"
     id: Mapped[int] = mapped_column(primary_key=True)
     ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey("ticket_comments.id"), nullable=True, index=True)
     filename: Mapped[str] = mapped_column(String(255))
     stored_name: Mapped[str] = mapped_column(String(255))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ticket: Mapped[Ticket] = relationship(back_populates="attachments")
+    comment: Mapped[TicketComment | None] = relationship(back_populates="attachments")
 
 class TicketWorkSession(Base):
     __tablename__ = "ticket_work_sessions"
@@ -144,10 +147,17 @@ class StockMovement(Base):
     ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"), nullable=True)
     movement_type: Mapped[str] = mapped_column(String(20))
     qty: Mapped[float] = mapped_column(Float)
+    # Price snapshots are stored on the movement itself so the historical
+    # value of materials used in a ticket does not change when the warehouse
+    # catalogue price is edited later.
+    unit_cost_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    issued_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     comment: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     item: Mapped[InventoryItem] = relationship()
     ticket: Mapped[Ticket | None] = relationship()
+    issued_by: Mapped[User | None] = relationship()
 
 class Contractor(Base):
     __tablename__ = "contractors"

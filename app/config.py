@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.5.2"
+    app_version: str = "0.5.4"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     base_url: str = ""
     upload_dir: str = "./uploads"
     cookie_https_only: bool = False
+    comment_photo_max_count: int = 5
+    comment_photo_max_mb: int = 12
 
     # Monthly KPI / technician rating. The weights are normalized automatically.
     kpi_monthly_target_points: float = 30.0
