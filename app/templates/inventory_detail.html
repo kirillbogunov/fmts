@@ -1,0 +1,50 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead inventory-detail-head">
+  <div><a class="back-link" href="/inventory">← Склад / ЗИП</a><div class="eyebrow">{{item.sku}}</div><h1>{{item.name}}</h1><p>Карточка складской позиции и история списаний по заявкам</p></div>
+  <div class="inventory-stock-badge {% if item.qty<=item.min_qty %}is-low{% endif %}"><span>Остаток</span><strong>{{item.qty}} {{item.unit}}</strong><small>минимум {{item.min_qty}} {{item.unit}}</small></div>
+</div>
+
+<div class="inventory-stat-grid">
+  <section class="inventory-stat"><span>Списано всего</span><strong>{{'%.3f'|format(stats.issued_qty)|trim('0')|trim('.')}} {{item.unit}}</strong><small>{{stats.movement_count}} операций списания</small></section>
+  <section class="inventory-stat"><span>Заявок с материалом</span><strong>{{stats.ticket_count}}</strong><small>уникальных заявок</small></section>
+  {% if can('ticket.cost') %}<section class="inventory-stat"><span>Сумма списаний</span><strong>{{stats.issued_total}} ₸</strong><small>по зафиксированным ценам</small></section>
+  <section class="inventory-stat"><span>Стоимость остатка</span><strong>{{stats.current_value}} ₸</strong><small>{{item.unit_cost}} ₸ / {{item.unit}}</small></section>{% endif %}
+</div>
+
+<div class="grid2 wide-left inventory-detail-grid">
+<div>
+<section class="panel">
+  <div class="panel-title-row"><div><h2>Куда списывалось</h2><p class="muted">Сводка по заявкам, в которых использовалась эта позиция.</p></div></div>
+  {% if usage_by_ticket %}<div class="inventory-ticket-usage">
+  {% for row in usage_by_ticket %}
+    <a class="inventory-usage-card" href="/tickets/{{row.ticket.id}}">
+      <div class="inventory-usage-main"><div><b>{{row.ticket.number}}</b><span class="badge s-{{row.ticket.status}}" style="{{badge_style('status',row.ticket.status)}}">{{ui_name('status',row.ticket.status,status_labels.get(row.ticket.status,row.ticket.status))}}</span></div><strong>{{row.ticket.title}}</strong><small>{{row.ticket.site.name if row.ticket.site else 'Объект не указан'}}{% if row.ticket.equipment %} · {{row.ticket.equipment.name}}{% endif %}</small></div>
+      <div class="inventory-usage-metrics"><b>{{row.qty}} {{item.unit}}</b>{% if can('ticket.cost') %}<strong>{{row.amount}} ₸</strong>{% endif %}<small>{{row.count}} спис. · {{row.last_at.strftime('%d.%m.%Y') if row.last_at else '—'}}</small></div>
+    </a>
+  {% endfor %}
+  </div>{% else %}<div class="empty-materials">По доступным вам заявкам списаний этой позиции ещё не было.</div>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-title-row"><div><h2>История списаний</h2><p class="muted">Кто, когда, в каком количестве и на какую заявку списал материал.</p></div></div>
+  {% if issue_rows %}<div class="table-scroll"><table class="responsive-table inventory-history-table"><thead><tr><th>Дата</th><th>Количество</th>{% if can('ticket.cost') %}<th>Цена</th><th>Сумма</th>{% endif %}<th>Кто списал</th><th>Заявка / объект</th></tr></thead><tbody>
+    {% for row in issue_rows %}<tr>
+      <td data-label="Дата">{{row.movement.created_at.strftime('%d.%m.%Y %H:%M') if row.movement.created_at else '—'}}</td>
+      <td data-label="Количество"><b>{{row.qty}} {{item.unit}}</b></td>
+      {% if can('ticket.cost') %}<td data-label="Цена">{{row.unit_cost}} ₸</td><td data-label="Сумма"><b>{{row.amount}} ₸</b></td>{% endif %}
+      <td data-label="Кто списал">{{row.issued_by.full_name if row.issued_by else '—'}}</td>
+      <td data-label="Заявка / объект">{% if row.ticket %}<a href="/tickets/{{row.ticket.id}}"><b>{{row.ticket.number}}</b> · {{row.ticket.title}}</a><small>{{row.ticket.site.name if row.ticket.site else 'Объект не указан'}}{% if row.ticket.equipment %} · {{row.ticket.equipment.name}}{% endif %}</small>{% else %}<span>Без заявки</span>{% endif %}{% if row.movement.comment %}<small>{{row.movement.comment}}</small>{% endif %}</td>
+    </tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-materials">История списаний пока пуста.</div>{% endif %}
+</section>
+</div>
+
+<div>
+<section class="panel inventory-item-card"><h2>Параметры позиции</h2><div class="facts">
+  <div><span>Код / SKU</span><b>{{item.sku}}</b></div><div><span>Наименование</span><b>{{item.name}}</b></div><div><span>Текущий остаток</span><b>{{item.qty}} {{item.unit}}</b></div><div><span>Минимальный остаток</span><b>{{item.min_qty}} {{item.unit}}</b></div><div><span>Состояние</span><b>{% if item.qty<=item.min_qty %}<span class="stock-state low">Ниже минимума</span>{% else %}<span class="stock-state ok">В наличии</span>{% endif %}</b></div>{% if can('ticket.cost') %}<div><span>Текущая цена</span><b>{{item.unit_cost}} ₸ / {{item.unit}}</b></div>{% endif %}{% if settings.onec_enabled %}<div><span>1С ID</span><b>{{item.one_c_id or '—'}}</b></div>{% endif %}
+</div></section>
+
+<section class="panel"><h2>Как читать историю</h2><p class="muted">Цена и сумма списания фиксируются в момент выдачи материала. Поэтому изменение текущей складской цены не изменяет стоимость старых заявок.</p>{% if user.role == 'technician' %}<p class="muted">Как техник вы видите историю только по заявкам, назначенным вам. Это ограничение действует и при прямом открытии ссылки.</p>{% endif %}</section>
+</div>
+</div>
+{% endblock %}

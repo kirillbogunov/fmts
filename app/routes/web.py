@@ -24,7 +24,7 @@ from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
 from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time
-from app.services.materials import ticket_material_summary, recalc_ticket_parts_cost, as_money
+from app.services.materials import ticket_material_summary, recalc_ticket_parts_cost, as_money, movement_amount, movement_unit_cost
 from app.access import has_permission, scope_ticket_query, can_view_ticket, can_comment_ticket, can_issue_stock, can_track_ticket_time, allowed_statuses, can_change_ticket_status, visible_navigation, role_summary
 from app.services.audit import audit
 
@@ -767,6 +767,69 @@ def inventory(request:Request,db:Session=Depends(get_db)):
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"inventory.view"): return forbidden(request,db,u,"inventory.view")
     return templates.TemplateResponse("inventory.html",ctx(request,db,items=db.query(InventoryItem).order_by(InventoryItem.name).all()))
+
+@router.get("/inventory/{item_id}", response_class=HTMLResponse)
+def inventory_detail(item_id:int, request:Request, db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    if not has_permission(u,"inventory.view"): return forbidden(request,db,u,"inventory.view")
+    item=db.get(InventoryItem,item_id)
+    if not item:
+        return Response("Позиция склада не найдена",status_code=404)
+
+    movements=(db.query(StockMovement)
+        .filter(StockMovement.item_id==item.id)
+        .order_by(StockMovement.created_at.desc(),StockMovement.id.desc())
+        .all())
+
+    # Detailed warehouse history must obey the same row-level access rules as tickets.
+    # Technicians see write-offs only for tickets assigned to them; operational roles
+    # with ticket.list_all see the complete history.
+    if not has_permission(u,"ticket.list_all"):
+        movements=[m for m in movements if m.ticket is not None and can_view_ticket(u,m.ticket)]
+
+    issue_rows=[]
+    issued_qty=0.0
+    issued_total=Decimal("0.00")
+    ticket_groups={}
+    for movement in movements:
+        if movement.movement_type!="issue":
+            continue
+        qty=abs(float(movement.qty or 0))
+        amount=movement_amount(movement)
+        issued_qty+=qty
+        issued_total+=amount
+        issue_rows.append({
+            "movement":movement,
+            "qty":qty,
+            "unit_cost":movement_unit_cost(movement),
+            "amount":amount,
+            "ticket":movement.ticket,
+            "issued_by":movement.issued_by,
+        })
+        if movement.ticket:
+            group=ticket_groups.setdefault(movement.ticket.id,{
+                "ticket":movement.ticket,"qty":0.0,"amount":Decimal("0.00"),
+                "count":0,"last_at":movement.created_at,
+            })
+            group["qty"]+=qty
+            group["amount"]+=amount
+            group["count"]+=1
+            if movement.created_at and (not group["last_at"] or movement.created_at>group["last_at"]):
+                group["last_at"]=movement.created_at
+
+    usage_by_ticket=sorted(ticket_groups.values(),key=lambda x:x["last_at"] or datetime.min,reverse=True)
+    current_value=(Decimal(str(item.qty or 0))*as_money(item.unit_cost)).quantize(Decimal("0.01"))
+    stats={
+        "issued_qty":issued_qty,
+        "issued_total":issued_total.quantize(Decimal("0.01")),
+        "ticket_count":len(ticket_groups),
+        "movement_count":len(issue_rows),
+        "current_value":current_value,
+    }
+    return templates.TemplateResponse("inventory_detail.html",ctx(
+        request,db,item=item,issue_rows=issue_rows,usage_by_ticket=usage_by_ticket,stats=stats,
+    ))
 
 @router.post("/inventory/new")
 def inventory_new(request:Request,sku:str=Form(...),name:str=Form(...),qty:float=Form(0),min_qty:float=Form(0),unit:str=Form("шт"),unit_cost:float=Form(0),db:Session=Depends(get_db)):
