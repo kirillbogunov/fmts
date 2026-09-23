@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-const CACHE = 'fmts-v055-inventory-history';
-=======
 const CACHE = 'fmts-v060-enterprise-servicedesk';
->>>>>>> c83dea0 (Первый коммит)
 const STATIC = ['/static/app.css','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));
@@ -23,8 +19,6 @@ self.addEventListener('fetch', event => {
     })));
   }
 });
-<<<<<<< HEAD
-=======
 
 self.addEventListener('push', event => {
   let data={title:'FMTS',body:'Новое уведомление',link:'/notifications'};
@@ -36,4 +30,3 @@ self.addEventListener('notificationclick', event => {
   const link=(event.notification.data&&event.notification.data.link)||'/notifications';
   event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(list=>{for(const c of list){if('focus' in c){c.navigate(link);return c.focus();}} if(clients.openWindow)return clients.openWindow(link);}));
 });
->>>>>>> c83dea0 (Первый коммит)

@@ -68,8 +68,6 @@
 {% if can('ticket.cost') %}<section class="panel ticket-cost-card"><h2>Стоимость заявки</h2><div class="cost-breakdown"><div><span>Работы / услуги</span><b>{{ticket.labor_cost or 0}} ₸</b></div><div><span>Списанные материалы</span><b>{{materials.total}} ₸</b></div><div class="cost-grand-total"><span>Итого по заявке</span><strong>{{total_cost}} ₸</strong></div></div><p class="muted">Стоимость материалов попадает в заявку автоматически в момент списания со склада.</p></section>{% endif %}
 
 <section class="panel facts ticket-facts"><div><span>Приоритет</span><b><span class="badge p-{{ticket.priority}}" style="{{badge_style('priority',ticket.priority)}}">{{ui_name('priority',ticket.priority,priority_labels.get(ticket.priority,ticket.priority))}}</span></b></div><div><span>SLA до</span><b>{{ticket.sla_due_at.strftime('%d.%m.%Y %H:%M') if ticket.sla_due_at else '—'}}</b></div><div><span>Создана</span><b>{{ticket.created_at.strftime('%d.%m.%Y %H:%M')}}</b></div>{% if user.role != 'requester' %}<div><span>Факт. время</span><b>{{work_time.total_label}}</b></div>{% endif %}{% if can('ticket.cost') %}<div><span>Материалы</span><b>{{materials.total}} ₸</b></div><div><span>Итого</span><b>{{total_cost}} ₸</b></div>{% endif %}</section>
-<<<<<<< HEAD
-=======
 
 <section class="panel enterprise-ticket" id="enterprise-ticket">
   <div class="panel-title-row"><div><div class="eyebrow">SERVICE DESK+</div><h2>Связи, согласования и знания</h2></div>{% if service %}<span class="badge">{{service.name}}</span>{% endif %}</div>
@@ -83,7 +81,6 @@
   {% if feedback_rows and user.role in ['dispatcher','manager','admin'] %}<div class="enterprise-section"><h3>Оценки заявителя</h3>{% for f in feedback_rows %}<div class="feedback-row"><b>{{'★'*f.rating}}{{'☆'*(5-f.rating)}}</b><span>{{f.comment}}</span><small>{{f.created_at.strftime('%d.%m.%Y %H:%M')}}</small></div>{% endfor %}</div>{% endif %}
 </section>
 
->>>>>>> c83dea0 (Первый коммит)
 </div></div>
 
 <div class="ticket-action-dock" aria-label="Быстрые действия по заявке">

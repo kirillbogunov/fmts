@@ -3,11 +3,7 @@
 <form class="panel form" method="post" enctype="multipart/form-data">
 <div class="form-grid">
 <label>Заголовок<input name="title" required placeholder="Например: не охлаждает бонета №7"></label>
-<<<<<<< HEAD
-<label>Категория<select name="category">{% for c in categories %}<option value="{{c.code}}">{{c.name}}</option>{% endfor %}</select></label>
-=======
 <label>Сервис / тип услуги<select name="service_id"><option value="">Без сервиса</option>{% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><label>Категория<select name="category">{% for c in categories %}<option value="{{c.code}}">{{c.name}}</option>{% endfor %}</select></label>
->>>>>>> c83dea0 (Первый коммит)
 <label>Объект / подразделение<select name="site_id" required><option value="">Выберите объект</option>{% for x in sites %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label>
 <label>Кабинет / зона<input name="room" placeholder="Например: торговый зал, кабинет 12"></label>
 <label>Телефон заявителя<input name="phone" inputmode="tel" placeholder="+7 ..."></label>
@@ -15,16 +11,10 @@
 {% if can('ticket.set_priority') %}<label>Приоритет<select name="priority">{% for p in priority_options %}<option value="{{p.code}}">{{p.name}}{% if p.sla %} — {{p.sla}} ч{% endif %}</option>{% endfor %}</select></label>{% else %}<input type="hidden" name="priority" value="normal"><label>Приоритет<input value="Обычный — меняет диспетчер" disabled></label>{% endif %}
 {% if can('ticket.assign') %}<label>Исполнитель<select name="assignee_id"><option value="">Назначить позже</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label>{% else %}<input type="hidden" name="assignee_id" value=""><label>Исполнитель<input value="Назначит диспетчер" disabled></label>{% endif %}
 </div>
-<<<<<<< HEAD
-<label>Описание<textarea name="description" rows="6" placeholder="Что произошло, где находится оборудование, дополнительные детали"></textarea></label>
-<label>Фото / файл<input type="file" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><small class="field-hint">На телефоне можно сразу выбрать снимок с камеры или галереи.</small></label>
-<div class="actions"><a class="btn" href="/tickets">Отмена</a><button class="btn primary">Создать заявку</button></div></form>
-=======
 {% if custom_fields %}<section class="custom-form-fields" id="customFormFields"><div class="eyebrow">ДОПОЛНИТЕЛЬНЫЕ ПОЛЯ СЕРВИСА</div><div class="form-grid">{% for f in custom_fields %}<label class="service-custom-field" data-service="{{f.service_id or ''}}" style="display:none">{{f.name}}{% if f.required %} *{% endif %}{% if f.field_type=='select' %}<select name="field_{{f.id}}" data-required="{{1 if f.required else 0}}"><option value="">—</option>{% for opt in custom_field_options.get(f.id,[]) %}<option value="{{opt}}">{{opt}}</option>{% endfor %}</select>{% elif f.field_type=='boolean' %}<select name="field_{{f.id}}" data-required="{{1 if f.required else 0}}"><option value="">—</option><option value="Да">Да</option><option value="Нет">Нет</option></select>{% elif f.field_type=='number' %}<input type="number" step="any" name="field_{{f.id}}" data-required="{{1 if f.required else 0}}">{% elif f.field_type=='date' %}<input type="date" name="field_{{f.id}}" data-required="{{1 if f.required else 0}}">{% else %}<input name="field_{{f.id}}" data-required="{{1 if f.required else 0}}">{% endif %}</label>{% endfor %}</div></section>{% endif %}
 
 <label>Описание<textarea name="description" rows="6" placeholder="Что произошло, где находится оборудование, дополнительные детали"></textarea></label>
 <label>Фото / файл<input type="file" name="attachment" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"><small class="field-hint">На телефоне можно сразу выбрать снимок с камеры или галереи.</small></label>
 <div class="actions"><a class="btn" href="/tickets">Отмена</a><button class="btn primary">Создать заявку</button></div></form>
 <script>(function(){const service=document.querySelector('select[name="service_id"]');if(!service)return;const fields=[...document.querySelectorAll('.service-custom-field')];function sync(){const id=service.value;fields.forEach(el=>{const match=!el.dataset.service||el.dataset.service===id;el.style.display=match?'block':'none';el.querySelectorAll('input,select,textarea').forEach(x=>{x.disabled=!match;x.required=match&&x.dataset.required==='1';});});}service.addEventListener('change',sync);sync();})();</script>
->>>>>>> c83dea0 (Первый коммит)
 {% endblock %}

@@ -19,11 +19,7 @@
 <div class="mobile-topbar">
   <button class="mobile-menu-btn" type="button" aria-label="Открыть меню" onclick="document.body.classList.toggle('menu-open')">☰</button>
   <a class="mobile-brand" href="/"><b>{{ app_name }}</b><small>ТОиР</small></a>
-<<<<<<< HEAD
-  <button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button>
-=======
   <a class="install-mini" href="/search" aria-label="Поиск">⌕</a><button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button>
->>>>>>> c83dea0 (Первый коммит)
 </div>
 <div class="layout">
 <aside class="sidebar" id="sidebar">
@@ -36,9 +32,6 @@
     {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}">↻ <span>ТО / ППР</span></a>{% endif %}
     {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}">▤ <span>Склад / ЗИП</span></a>{% endif %}
     {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}">◉ <span>Подрядчики</span></a>{% endif %}
-<<<<<<< HEAD
-    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}">★ <span>KPI / Рейтинг</span></a>{% endif %}
-=======
     {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}">▧ <span>База знаний</span></a>{% endif %}
     {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}">◫ <span>Каталог сервисов</span></a>{% endif %}
     {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}">★ <span>KPI / Рейтинг</span></a>{% endif %}
@@ -46,7 +39,6 @@
     {% if nav.notifications %}<a href="/notifications" class="navitem {% if path.startswith('/notifications') %}active{% endif %}">◌ <span>Уведомления{% if unread_notifications %} · {{unread_notifications}}{% endif %}</span></a>{% endif %}
     {% if user.role in ['dispatcher','manager','admin'] %}<a href="/team/schedule" class="navitem {% if path.startswith('/team/schedule') %}active{% endif %}">◴ <span>График техников</span></a>{% endif %}
     {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}">⚡ <span>Автоматизация</span></a>{% endif %}
->>>>>>> c83dea0 (Первый коммит)
     {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}">☷ <span>Журнал контроля</span></a>{% endif %}
     {% if nav.integration %}<a href="/integration" class="navitem {% if path.startswith('/integration') %}active{% endif %}">⇄ <span>Интеграции</span></a>{% endif %}
     {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}">⚙ <span>Настройки</span></a>{% endif %}
@@ -70,11 +62,7 @@
   <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>Заявки</small></a>
   {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>{% endif %}
   {% if nav.maintenance %}<a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>ППР</small></a>{% endif %}
-<<<<<<< HEAD
-  <a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>Профиль</small></a>
-=======
   {% if nav.notifications %}<a href="/notifications" class="{% if path.startswith('/notifications') %}active{% endif %}"><span>◌</span><small>Уведомления{% if unread_notifications %} {{unread_notifications}}{% endif %}</small></a>{% else %}<a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>Профиль</small></a>{% endif %}
->>>>>>> c83dea0 (Первый коммит)
 </nav>
 {% else %}{% block anonymous %}{% endblock %}
 <footer class="public-footer">Разработчик: <b>{{ developer_name }}</b> © 2026 · Telegram: <a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></footer>{% endif %}

@@ -30,11 +30,7 @@
 <section class="panel kpi-rating-panel">
   <div class="panelhead"><div><h2>Рейтинг ремонтников</h2><p class="muted">Целевой объём: {{report.target_points}} баллов работ на месяц</p></div></div>
   <table class="responsive-table kpi-table">
-<<<<<<< HEAD
-    <thead><tr><th>Место</th><th>Ремонтник</th><th>KPI</th><th>Рейтинг</th><th>Выполнено</th><th>SLA</th><th>Закрытие</th><th>Баллы</th><th>Документация</th><th>Факт. время</th><th>Ср. цикл</th></tr></thead>
-=======
     <thead><tr><th>Место</th><th>Ремонтник</th><th>KPI</th><th>Рейтинг</th><th>Выполнено</th><th>SLA</th><th>Закрытие</th><th>Баллы</th><th>Документация</th><th>Оценка</th><th>Факт. время</th><th>Ср. цикл</th></tr></thead>
->>>>>>> c83dea0 (Первый коммит)
     <tbody>
     {% for x in report.rows %}
       <tr class="{% if x.rank == 1 %}kpi-first{% elif not x.has_activity %}kpi-no-activity{% endif %}">
@@ -46,20 +42,12 @@
         <td data-label="SLA"><span class="{% if x.sla_rate >= 90 %}good-text{% elif x.sla_rate < 70 and x.completed %}bad-text{% endif %}">{{x.sla_rate}}%</span>{% if x.overdue_completed %}<small>{{x.overdue_completed}} проср.</small>{% endif %}</td>
         <td data-label="Закрытие">{{x.closure_rate}}%</td>
         <td data-label="Баллы"><b>{{x.points}}</b><small>{{x.productivity_rate}}% цели</small></td>
-<<<<<<< HEAD
-        <td data-label="Документация">{{x.documentation_rate}}%</td>
-=======
         <td data-label="Документация">{{x.documentation_rate}}%</td><td data-label="Оценка">{% if x.customer_reviews %}<b>★ {{x.customer_rating}}</b><small>{{x.customer_reviews}} отзыв.</small>{% else %}—{% endif %}</td>
->>>>>>> c83dea0 (Первый коммит)
         <td data-label="Факт. время"><b>{{x.tracked_hours}} ч</b><small>{% if x.completed %}{{x.avg_tracked_hours}} ч / заявку{% else %}{{x.work_sessions}} сеанс(а){% endif %}</small></td>
         <td data-label="Ср. цикл">{% if x.completed %}{{x.avg_resolution_hours}} ч{% else %}—{% endif %}<small>от создания до закрытия</small></td>
       </tr>
     {% else %}
-<<<<<<< HEAD
-      <tr><td class="empty-row" colspan="11">Нет активных пользователей с ролью «Техник»</td></tr>
-=======
       <tr><td class="empty-row" colspan="12">Нет активных пользователей с ролью «Техник»</td></tr>
->>>>>>> c83dea0 (Первый коммит)
     {% endfor %}
     </tbody>
   </table>

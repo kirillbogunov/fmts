@@ -183,7 +183,7 @@ integrations/1c/
 pytest -q
 ```
 
-Текущая версия: **0.6.0 Enterprise ServiceDesk Pack**.
+Текущая версия: **0.6.1 Enterprise ServiceDesk Hotfix**.
 
 ---
 

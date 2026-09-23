@@ -7,11 +7,7 @@ from typing import Iterable
 
 from sqlalchemy.orm import Session
 
-<<<<<<< HEAD
-from app.models import Ticket, User, TicketWorkSession
-=======
 from app.models import Ticket, User, TicketWorkSession, TicketFeedback
->>>>>>> c83dea0 (Первый коммит)
 
 COMPLETED_STATUSES = {"resolved", "closed"}
 CANCELLED_STATUSES = {"cancelled"}
@@ -141,12 +137,9 @@ def calculate_monthly_kpi(
         on_time = [t for t in sla_tickets if t.resolved_at and t.resolved_at <= t.sla_due_at]
         overdue_completed = len(sla_tickets) - len(on_time)
         documented = [t for t in completed if (t.master_comment or "").strip()]
-<<<<<<< HEAD
-=======
         completed_ids=[t.id for t in completed]
         feedback_rows=(db.query(TicketFeedback).filter(TicketFeedback.ticket_id.in_(completed_ids)).all() if completed_ids else [])
         avg_customer_rating=round(sum(x.rating for x in feedback_rows)/len(feedback_rows),1) if feedback_rows else 0.0
->>>>>>> c83dea0 (Первый коммит)
         points = round(sum(PRIORITY_POINTS.get(t.priority, 1.0) for t in completed), 2)
 
         sla_rate = _percent(len(on_time), len(sla_tickets)) if completed_count else 0.0
@@ -234,11 +227,8 @@ def calculate_monthly_kpi(
                 "overdue_open": overdue_open,
                 "score": score,
                 "rating": rating,
-<<<<<<< HEAD
-=======
                 "customer_rating": avg_customer_rating,
                 "customer_reviews": len(feedback_rows),
->>>>>>> c83dea0 (Первый коммит)
                 "has_activity": bool(handled_count or completed_count),
             }
         )
