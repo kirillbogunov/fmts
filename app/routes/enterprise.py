@@ -183,10 +183,10 @@ def global_search(request:Request,q:str='',db:Session=Depends(get_db)):
     return templates.TemplateResponse('search.html',ctx(request,db,q=q,tickets=tickets,equipment=equipment,articles=articles))
 
 @router.post('/saved-filters/new')
-def saved_filter_new(request:Request,name:str=Form(...),status:str=Form(''),q:str=Form(''),priority:str=Form(''),db:Session=Depends(get_db)):
+def saved_filter_new(request:Request,name:str=Form(...),status:str=Form(''),q:str=Form(''),priority:str=Form(''),site_id:str=Form(''),assignee_id:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
-    payload={k:v for k,v in {'status':status,'q':q,'priority':priority}.items() if v}
+    payload={k:v for k,v in {'status':status,'q':q,'priority':priority,'site_id':site_id,'assignee_id':assignee_id}.items() if v}
     db.add(SavedFilter(user_id=u.id,name=name,filters_json=json.dumps(payload,ensure_ascii=False)));db.commit();return RedirectResponse('/tickets',303)
 
 @router.get('/saved-filters/{filter_id}/apply')

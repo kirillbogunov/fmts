@@ -24,6 +24,8 @@ class User(Base):
     external_dn: Mapped[str] = mapped_column(String(500), default="", index=True)
     directory_source: Mapped[str] = mapped_column(String(30), default="local")
     hourly_rate: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Almaty")
+    locale: Mapped[str] = mapped_column(String(10), default="ru")
 
 class Site(Base):
     __tablename__ = "sites"
@@ -51,6 +53,8 @@ class Equipment(Base):
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("equipment.id"), nullable=True, index=True)
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     criticality: Mapped[str] = mapped_column(String(20), default="normal")
+    external_source: Mapped[str] = mapped_column(String(30), default="")
+    external_key: Mapped[str] = mapped_column(String(120), default="", index=True)
     site: Mapped[Site] = relationship(back_populates="equipment")
     tickets: Mapped[list[Ticket]] = relationship(back_populates="equipment")
 
@@ -512,3 +516,65 @@ class BackgroundServiceLog(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+
+# ---- Experience / subscriptions / resources / Zabbix extension v0.7.4 ----
+class FilterSubscription(Base):
+    __tablename__ = "filter_subscriptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    saved_filter_id: Mapped[int] = mapped_column(ForeignKey("saved_filters.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    periodicity: Mapped[str] = mapped_column(String(20), default="daily")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User] = relationship()
+    saved_filter: Mapped[SavedFilter] = relationship()
+
+class SurveyTemplate(Base):
+    __tablename__ = "survey_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True, index=True)
+    questions_json: Mapped[str] = mapped_column(Text, default="[]")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    service: Mapped[ServiceCatalog | None] = relationship()
+
+class SurveyResponse(Base):
+    __tablename__ = "survey_responses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    survey_id: Mapped[int] = mapped_column(ForeignKey("survey_templates.id"), index=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    answers_json: Mapped[str] = mapped_column(Text, default="{}")
+    score: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    survey: Mapped[SurveyTemplate] = relationship()
+    ticket: Mapped[Ticket] = relationship()
+    user: Mapped[User | None] = relationship()
+
+class Resource(Base):
+    __tablename__ = "resources"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    resource_type: Mapped[str] = mapped_column(String(80), default="resource", index=True)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"), nullable=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    capacity: Mapped[int] = mapped_column(Integer, default=1)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    site: Mapped[Site | None] = relationship()
+
+class ResourceBooking(Base):
+    __tablename__ = "resource_bookings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    resource_id: Mapped[int] = mapped_column(ForeignKey("resources.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(220))
+    start_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    end_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resource: Mapped[Resource] = relationship()
+    user: Mapped[User] = relationship()

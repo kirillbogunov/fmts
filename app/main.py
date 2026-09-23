@@ -16,6 +16,7 @@ from app.routes.enterprise import router as enterprise_router
 from app.routes.operations import router as operations_router
 from app.routes.admin_services import router as admin_services_router
 from app.routes.assets_plus import router as assets_plus_router
+from app.routes.experience import router as experience_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
@@ -25,6 +26,7 @@ from app.services.email_channel import poll_mailbox
 from app.services.report_subscriptions import process_report_subscriptions
 from app.services.reminders import process_ticket_reminders
 from app.services.system_jobs import run_logged_job
+from app.services.zabbix_sync import sync_zabbix
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -45,6 +47,12 @@ async def enterprise_loop():
         run_logged_job("ticket_reminders", process_ticket_reminders)
         await asyncio.sleep(max(30, settings.enterprise_loop_seconds))
 
+async def zabbix_loop():
+    while True:
+        if settings.zabbix_enabled:
+            run_logged_job("zabbix_sync", sync_zabbix)
+        await asyncio.sleep(max(300, settings.zabbix_sync_interval_minutes * 60))
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db=SessionLocal()
@@ -54,10 +62,12 @@ async def lifespan(app: FastAPI):
         db.close()
     task=asyncio.create_task(maintenance_loop())
     enterprise_task=asyncio.create_task(enterprise_loop())
+    zabbix_task=asyncio.create_task(zabbix_loop())
     yield
-    task.cancel(); enterprise_task.cancel()
+    task.cancel(); enterprise_task.cancel(); zabbix_task.cancel()
     with suppress(asyncio.CancelledError): await task
     with suppress(asyncio.CancelledError): await enterprise_task
+    with suppress(asyncio.CancelledError): await zabbix_task
 
 app=FastAPI(
     title=settings.app_name,
@@ -85,6 +95,7 @@ app.include_router(enterprise_router)
 app.include_router(operations_router)
 app.include_router(admin_services_router)
 app.include_router(assets_plus_router)
+app.include_router(experience_router)
 app.include_router(web_router)
 
 

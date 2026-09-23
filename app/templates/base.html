@@ -32,48 +32,51 @@
     <button class="sidebar-close" type="button" aria-label="Закрыть меню" onclick="setMobileMenu(false)">×</button>
   </div>
   <nav class="sidebar-nav">
-    <div class="nav-section"><span>РАБОТА</span></div>
-    <a href="/" class="navitem {% if path == '/' %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">Дашборд</span></a>
-    <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}"><span class="nav-icon">☑</span><span class="nav-label">Заявки</span></a>
-    {% if nav.notifications %}<a href="/notifications" class="navitem {% if path.startswith('/notifications') %}active{% endif %}"><span class="nav-icon">◌</span><span class="nav-label">Уведомления{% if unread_notifications %}<b class="nav-count">{{unread_notifications}}</b>{% endif %}</span></a>{% endif %}
-    {% if user.role in ['dispatcher','manager','admin'] %}<a href="/team/schedule" class="navitem {% if path.startswith('/team/schedule') %}active{% endif %}"><span class="nav-icon">◴</span><span class="nav-label">График техников</span></a>{% endif %}
-    {% if nav.teams %}<a href="/teams" class="navitem {% if path.startswith('/teams') %}active{% endif %}"><span class="nav-icon">◎</span><span class="nav-label">Группы исполнителей</span></a>{% endif %}
+    <div class="nav-section"><span>{{tr('work')}}</span></div>
+    <a href="/" class="navitem {% if path == '/' %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">{{tr('dashboard')}}</span></a>
+    <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}"><span class="nav-icon">☑</span><span class="nav-label">{{tr('tickets')}}</span></a>
+    {% if nav.notifications %}<a href="/notifications" class="navitem {% if path.startswith('/notifications') %}active{% endif %}"><span class="nav-icon">◌</span><span class="nav-label">{{tr('notifications')}}{% if unread_notifications %}<b class="nav-count">{{unread_notifications}}</b>{% endif %}</span></a>{% endif %}
+    {% if user.role in ['dispatcher','manager','admin'] %}<a href="/team/schedule" class="navitem {% if path.startswith('/team/schedule') %}active{% endif %}"><span class="nav-icon">◴</span><span class="nav-label">{{tr('team_schedule')}}</span></a>{% endif %}
+    {% if nav.teams %}<a href="/teams" class="navitem {% if path.startswith('/teams') %}active{% endif %}"><span class="nav-icon">◎</span><span class="nav-label">{{tr('teams')}}</span></a>{% endif %}
 
-    {% if nav.sites or nav.equipment or nav.maintenance or nav.inventory or nav.contractors or nav.data_import %}<div class="nav-section"><span>ТОИР И АКТИВЫ</span></div>{% endif %}
-    {% if nav.sites %}<a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}"><span class="nav-icon">⌂</span><span class="nav-label">Объекты</span></a>{% endif %}
-    {% if nav.equipment %}<a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}"><span class="nav-icon">▣</span><span class="nav-label">Оборудование / CMDB</span></a>{% endif %}
-    {% if nav.data_import %}<a href="/data-import" class="navitem {% if path.startswith('/data-import') %}active{% endif %}"><span class="nav-icon">⇩</span><span class="nav-label">Импорт данных</span></a>{% endif %}
-    {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}"><span class="nav-icon">↻</span><span class="nav-label">ТО / ППР</span></a>{% endif %}
-    {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}"><span class="nav-icon">▤</span><span class="nav-label">Склад / ЗИП</span></a>{% endif %}
-    {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}"><span class="nav-icon">◉</span><span class="nav-label">Подрядчики</span></a>{% endif %}
+    {% if nav.sites or nav.equipment or nav.maintenance or nav.inventory or nav.contractors or nav.data_import or nav.resources %}<div class="nav-section"><span>{{tr('assets')}}</span></div>{% endif %}
+    {% if nav.sites %}<a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}"><span class="nav-icon">⌂</span><span class="nav-label">{{tr('sites')}}</span></a>{% endif %}
+    {% if nav.equipment %}<a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}"><span class="nav-icon">▣</span><span class="nav-label">{{tr('equipment')}}</span></a>{% endif %}
+    {% if nav.data_import %}<a href="/data-import" class="navitem {% if path.startswith('/data-import') %}active{% endif %}"><span class="nav-icon">⇩</span><span class="nav-label">{{tr('data_import')}}</span></a>{% endif %}
+    {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}"><span class="nav-icon">↻</span><span class="nav-label">{{tr('maintenance')}}</span></a>{% endif %}
+    {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}"><span class="nav-icon">▤</span><span class="nav-label">{{tr('inventory')}}</span></a>{% endif %}
+    {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}"><span class="nav-icon">◉</span><span class="nav-label">{{tr('contractors')}}</span></a>{% endif %}
+    {% if nav.resources %}<a href="/resources" class="navitem {% if path.startswith('/resources') %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">{{tr('resources')}}</span></a>{% endif %}
 
-    {% if nav.services or nav.knowledge or nav.templates or nav.automation or nav.categories %}<div class="nav-section"><span>SERVICE DESK</span></div>{% endif %}
-    {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">Каталог сервисов</span></a>{% endif %}
-    {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}"><span class="nav-icon">▧</span><span class="nav-label">База знаний</span></a>{% endif %}
-    {% if nav.templates %}<a href="/ticket-templates" class="navitem {% if path.startswith('/ticket-templates') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">Шаблоны / Наряды</span></a>{% endif %}
-    {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}"><span class="nav-icon nav-icon-accent">⚡</span><span class="nav-label">Автоматизация</span></a>{% endif %}
-    {% if nav.categories %}<a href="/categories" class="navitem {% if path.startswith('/categories') %}active{% endif %}"><span class="nav-icon">⌘</span><span class="nav-label">Классификаторы</span></a>{% endif %}
+    {% if nav.services or nav.knowledge or nav.templates or nav.automation or nav.categories or nav.surveys %}<div class="nav-section"><span>{{tr('service_desk')}}</span></div>{% endif %}
+    {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">{{tr('services')}}</span></a>{% endif %}
+    {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}"><span class="nav-icon">▧</span><span class="nav-label">{{tr('knowledge')}}</span></a>{% endif %}
+    {% if nav.templates %}<a href="/ticket-templates" class="navitem {% if path.startswith('/ticket-templates') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">{{tr('templates')}}</span></a>{% endif %}
+    {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}"><span class="nav-icon nav-icon-accent">⚡</span><span class="nav-label">{{tr('automation')}}</span></a>{% endif %}
+    {% if nav.categories %}<a href="/categories" class="navitem {% if path.startswith('/categories') %}active{% endif %}"><span class="nav-icon">⌘</span><span class="nav-label">{{tr('categories')}}</span></a>{% endif %}
+    {% if nav.surveys %}<a href="/surveys" class="navitem {% if path.startswith('/surveys') %}active{% endif %}"><span class="nav-icon">☆</span><span class="nav-label">{{tr('surveys')}}</span></a>{% endif %}
 
-    {% if nav.kpi or nav.reports or nav.audit or nav.labor %}<div class="nav-section"><span>АНАЛИТИКА</span></div>{% endif %}
-    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}"><span class="nav-icon">★</span><span class="nav-label">KPI / Рейтинг</span></a>{% endif %}
-    {% if nav.labor %}<a href="/reports/labor" class="navitem {% if path.startswith('/reports/labor') %}active{% endif %}"><span class="nav-icon">◷</span><span class="nav-label">Трудозатраты</span></a>{% endif %}
-    {% if nav.reports %}<a href="/reports/builder" class="navitem {% if path.startswith('/reports/builder') %}active{% endif %}"><span class="nav-icon">▥</span><span class="nav-label">Конструктор отчётов</span></a>{% endif %}
-    {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">Журнал контроля</span></a>{% endif %}
+    {% if nav.kpi or nav.reports or nav.audit or nav.labor or nav.subscriptions %}<div class="nav-section"><span>{{tr('analytics')}}</span></div>{% endif %}
+    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}"><span class="nav-icon">★</span><span class="nav-label">{{tr('kpi')}}</span></a>{% endif %}
+    {% if nav.labor %}<a href="/reports/labor" class="navitem {% if path.startswith('/reports/labor') %}active{% endif %}"><span class="nav-icon">◷</span><span class="nav-label">{{tr('labor')}}</span></a>{% endif %}
+    {% if nav.reports %}<a href="/reports/builder" class="navitem {% if path.startswith('/reports/builder') %}active{% endif %}"><span class="nav-icon">▥</span><span class="nav-label">{{tr('reports')}}</span></a>{% endif %}
+    {% if nav.subscriptions %}<a href="/subscriptions" class="navitem {% if path.startswith('/subscriptions') %}active{% endif %}"><span class="nav-icon">✉</span><span class="nav-label">{{tr('subscriptions')}}</span></a>{% endif %}
+    {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">{{tr('audit')}}</span></a>{% endif %}
 
-    {% if nav.integration or nav.settings or nav.users or user.role == 'admin' %}<div class="nav-section"><span>УПРАВЛЕНИЕ</span></div>{% endif %}
-    {% if nav.integration %}<a href="/integration" class="navitem {% if path == '/integration' or path.startswith('/integration/') %}active{% endif %}"><span class="nav-icon">⇄</span><span class="nav-label">Интеграции</span></a>{% endif %}
-    {% if nav.system_services %}<a href="/system-services" class="navitem {% if path.startswith('/system-services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">Системные сервисы</span></a>{% endif %}
-    {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}"><span class="nav-icon">⚙</span><span class="nav-label">Настройки</span></a>{% endif %}
-    {% if nav.users %}<a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}"><span class="nav-icon">♙</span><span class="nav-label">Пользователи</span></a>{% endif %}
+    {% if nav.integration or nav.settings or nav.users or user.role == 'admin' %}<div class="nav-section"><span>{{tr('management')}}</span></div>{% endif %}
+    {% if nav.integration %}<a href="/integration" class="navitem {% if path == '/integration' or path.startswith('/integration/') %}active{% endif %}"><span class="nav-icon">⇄</span><span class="nav-label">{{tr('integrations')}}</span></a>{% endif %}
+    {% if nav.system_services %}<a href="/system-services" class="navitem {% if path.startswith('/system-services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">{{tr('system_services')}}</span></a>{% endif %}
+    {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}"><span class="nav-icon">⚙</span><span class="nav-label">{{tr('settings')}}</span></a>{% endif %}
+    {% if nav.users %}<a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}"><span class="nav-icon">♙</span><span class="nav-label">{{tr('users')}}</span></a>{% endif %}
     {% if user.role == 'admin' %}<a href="/docs" class="navitem"><span class="nav-icon nav-icon-api">API</span><span class="nav-label">REST API</span></a>{% endif %}
-    <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}"><span class="nav-icon">ⓘ</span><span class="nav-label">О программе</span></a>
+    <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}"><span class="nav-icon">ⓘ</span><span class="nav-label">{{tr('about')}}</span></a>
   </nav>
   <div class="sidebar-bottom">
-    <button id="installPwa" class="navitem install-nav" type="button" hidden><span class="nav-icon">▣</span><span class="nav-label">Установить приложение</span></button>
+    <button id="installPwa" class="navitem install-nav" type="button" hidden><span class="nav-icon">▣</span><span class="nav-label">{{tr('install')}}</span></button>
     <div class="userbox">
       <div class="user-avatar">{{ (user.full_name or user.username or 'U')[:1] | upper }}</div>
       <div class="user-meta"><b>{{ user.full_name }}</b><small>{{ role_labels.get(user.role, user.role) }}</small></div>
-      <div class="user-actions"><a href="/profile">Профиль</a><a href="/logout">Выйти</a></div>
+      <div class="user-actions"><a href="/profile">{{tr('profile')}}</a><a href="/logout">{{tr('logout')}}</a></div>
     </div>
   </div>
 </aside>
@@ -86,11 +89,11 @@
 </footer></main>
 </div>
 <nav class="mobile-bottom-nav" aria-label="Основная навигация">
-  <a href="/" class="{% if path == '/' %}active{% endif %}"><span>⌂</span><small>Главная</small></a>
-  <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>Заявки</small></a>
+  <a href="/" class="{% if path == '/' %}active{% endif %}"><span>⌂</span><small>{{tr('dashboard')}}</small></a>
+  <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>{{tr('tickets')}}</small></a>
   {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>{% endif %}
-  {% if nav.maintenance %}<a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>ППР</small></a>{% endif %}
-  {% if nav.notifications %}<a href="/notifications" class="{% if path.startswith('/notifications') %}active{% endif %}"><span>◌</span><small>Уведомления{% if unread_notifications %} {{unread_notifications}}{% endif %}</small></a>{% else %}<a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>Профиль</small></a>{% endif %}
+  {% if nav.maintenance %}<a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>{{tr('maintenance')}}</small></a>{% endif %}
+  {% if nav.notifications %}<a href="/notifications" class="{% if path.startswith('/notifications') %}active{% endif %}"><span>◌</span><small>{{tr('notifications')}}{% if unread_notifications %} {{unread_notifications}}{% endif %}</small></a>{% else %}<a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>{{tr('profile')}}</small></a>{% endif %}
 </nav>
 {% else %}{% block anonymous %}{% endblock %}
 <footer class="public-footer">Разработчик: <b>{{ developer_name }}</b> © 2026 · Telegram: <a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></footer>{% endif %}

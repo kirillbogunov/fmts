@@ -239,3 +239,36 @@ _original_run_lightweight_migrations_v072 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v072(engine)
     _run_v073_cmdb_labor(engine)
+
+# v0.7.4: localization preferences and external CMDB identity.
+def _run_v074_experience(engine: Engine) -> None:
+    user_cols = _columns(engine, "users")
+    if user_cols:
+        additions = {
+            "timezone": "VARCHAR(64) DEFAULT 'Asia/Almaty'",
+            "locale": "VARCHAR(10) DEFAULT 'ru'",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in user_cols:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+            conn.execute(text("UPDATE users SET timezone='Asia/Almaty' WHERE timezone IS NULL OR timezone=''"))
+            conn.execute(text("UPDATE users SET locale='ru' WHERE locale IS NULL OR locale=''"))
+
+    equipment_cols = _columns(engine, "equipment")
+    if equipment_cols:
+        additions = {
+            "external_source": "VARCHAR(30) DEFAULT ''",
+            "external_key": "VARCHAR(120) DEFAULT ''",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in equipment_cols:
+                    conn.execute(text(f"ALTER TABLE equipment ADD COLUMN {name} {ddl}"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_equipment_external_key ON equipment (external_key)"))
+
+_original_run_lightweight_migrations_v073 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v073(engine)
+    _run_v074_experience(engine)

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.7.3"
+    app_version: str = "0.7.4"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
@@ -75,6 +75,20 @@ class Settings(BaseSettings):
     # E-mail command processing
     email_status_commands_enabled: bool = True
     email_add_recipients_as_observers: bool = True
+
+    # Localization / time zones
+    default_timezone: str = "Asia/Almaty"
+    default_locale: str = "ru"
+
+    # Zabbix -> CMDB (optional)
+    zabbix_enabled: bool = False
+    zabbix_url: str = ""
+    zabbix_username: str = ""
+    zabbix_password: str = ""
+    zabbix_token: str = ""
+    zabbix_default_site_id: int = 0
+    zabbix_verify_ssl: bool = True
+    zabbix_sync_interval_minutes: int = 60
 
     # Monthly KPI / technician rating. The weights are normalized automatically.
     kpi_monthly_target_points: float = 30.0

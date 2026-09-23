@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}
+<div class="pagehead"><div><div class="eyebrow">INTEGRATIONS</div><h1>Zabbix → CMDB</h1><p>Автоматическое создание и обновление оборудования FMTS из Zabbix.</p></div><a class="btn" href="/integration">← Интеграции</a></div>
+<div class="cards"><div class="metric"><span>Интеграция</span><strong>{% if settings.zabbix_enabled %}ON{% else %}OFF{% endif %}</strong></div><div class="metric"><span>URL настроен</span><strong>{% if settings.zabbix_url %}Да{% else %}Нет{% endif %}</strong></div><div class="metric"><span>Автосинхронизация</span><strong>{{settings.zabbix_sync_interval_minutes}} мин</strong></div></div>
+{% if sync_result %}<div class="alert {% if sync_result.error %}danger{% else %}ok{% endif %}">{% if sync_result.error %}{{sync_result.error}}{% else %}Получено: {{sync_result.seen}}, создано: {{sync_result.created}}, обновлено: {{sync_result.updated}}.{% endif %}</div>{% endif %}
+<div class="grid2"><section class="panel"><h2>Ручная синхронизация</h2><form class="form compact" method="post" action="/integration/zabbix/sync"><label>Объект FMTS<select name="site_id"><option value="">Из ZABBIX_DEFAULT_SITE_ID</option>{% for s in sites %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><button class="btn primary">Синхронизировать сейчас</button></form></section><section class="panel"><h2>Переменные Render</h2><pre class="pre">ZABBIX_ENABLED=true
+ZABBIX_URL=https://zabbix.example/api_jsonrpc.php
+ZABBIX_TOKEN=...
+ZABBIX_DEFAULT_SITE_ID=1
+ZABBIX_SYNC_INTERVAL_MINUTES=60</pre><p class="muted">Секретный токен хранится только в Environment и в интерфейсе не показывается.</p></section></div>
+{% endblock %}
