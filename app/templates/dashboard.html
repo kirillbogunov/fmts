@@ -1,55 +1,145 @@
-{% extends "base.html" %}{% block title %}Дашборд — {{ app_name }}{% endblock %}
+{% extends "base.html" %}
+{% block title %}Дашборд — {{ app_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>{% endblock %}
 {% block content %}
-<div class="pagehead"><div><h1>Дашборд</h1><p>Состояние эксплуатации и заявок</p></div><a class="btn primary" href="/tickets/new">+ Новая заявка</a></div>
-<div class="cards">
-<div class="metric"><span>Открытые заявки</span><strong>{{ open_count }}</strong></div>
-<div class="metric danger-m"><span>Просрочено SLA</span><strong>{{ overdue }}</strong></div>
-{% if equipment_count is not none %}<div class="metric"><span>Единиц оборудования</span><strong>{{ equipment_count }}</strong></div>{% endif %}
-{% if due_maintenance is not none %}<div class="metric warn-m"><span>{% if user.role=='technician' %}Мои ТО в ближайшие 7 дней{% else %}ТО в ближайшие 7 дней{% endif %}</span><strong>{{ due_maintenance }}</strong></div>{% endif %}
-{% if low_stock is not none %}<div class="metric"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong></div>{% endif %}
+<div class="pagehead dashboard-head"><div><h1>Дашборд</h1><p>Состояние эксплуатации, нагрузки и сервиса в реальном времени</p></div><a class="btn primary" href="/tickets/new">+ Новая заявка</a></div>
+<div class="cards dashboard-kpis">
+<div class="metric stat-card primary"><span>Открытые заявки</span><strong>{{ open_count }}</strong><small>Требуют обработки сейчас</small></div>
+<div class="metric stat-card danger-m"><span>Просрочено SLA</span><strong>{{ overdue }}</strong><small>Нужен приоритетный разбор</small></div>
+{% if equipment_count is not none %}<div class="metric stat-card"><span>Единиц оборудования</span><strong>{{ equipment_count }}</strong><small>На обслуживании в системе</small></div>{% endif %}
+{% if due_maintenance is not none %}<div class="metric stat-card warn-m"><span>{% if user.role=='technician' %}Мои ТО в ближайшие 7 дней{% else %}ТО в ближайшие 7 дней{% endif %}</span><strong>{{ due_maintenance }}</strong><small>Требуют планирования</small></div>{% endif %}
+{% if low_stock is not none %}<div class="metric stat-card"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong><small>Позиции, которые нужно пополнить</small></div>{% endif %}
 </div>
-<div class="dashboard-analytics-grid">
-<section class="panel analytics-panel">
-  <div class="panelhead"><div><h2>Быстрая аналитика</h2><p class="muted">Круговые индикаторы по текущему состоянию заявок</p></div></div>
-  <div class="ring-grid">
+
+<div class="dashboard-analytics-grid dashboard-pro-grid">
+<section class="panel analytics-panel chart-panel">
+  <div class="panelhead"><div><h2>Динамика заявок за 7 дней</h2><p class="muted">Интерактивный график новых обращений по дням</p></div><div class="analytics-badge">Live</div></div>
+  <div class="chart-shell chart-shell-lg"><canvas id="ticketsLineChart" aria-label="График новых заявок"></canvas></div>
+  <div class="mini-trend-grid">
+    {% for p in daily_series %}
+    <div class="mini-trend"><span>{{ p.label }}</span><b>{{ p.count }}</b></div>
+    {% endfor %}
+  </div>
+</section>
+<section class="panel analytics-panel chart-panel">
+  <div class="panelhead"><div><h2>Структура заявок</h2><p class="muted">Круговая диаграмма по текущим статусам</p></div></div>
+  <div class="donut-layout">
+    <div class="chart-shell chart-shell-donut"><canvas id="ticketStatusChart" aria-label="Структура заявок по статусам"></canvas></div>
+    <div class="status-legend">
+      {% for status,count in by_status %}<div class="legend-row"><span class="badge s-{{status}}" style="{{badge_style('status',status)}}">{{ui_name('status',status,status_labels.get(status,status))}}</span><b>{{ count }}</b></div>{% else %}<p class="muted">Нет данных</p>{% endfor %}
+    </div>
+  </div>
+  <div class="ring-grid upgraded-rings">
     <div class="ring-card">
       <div class="ring-chart" style="--percent:{{ dashboard_rings.open_share }}"><span>{{ dashboard_rings.open_share }}%</span></div>
-      <div class="ring-copy"><b>Открытые заявки</b><small>{{ open_count }} из {{ total_count or 0 }}</small></div>
+      <div class="ring-copy"><b>Открытые</b><small>{{ open_count }} из {{ total_count or 0 }}</small></div>
     </div>
     <div class="ring-card">
       <div class="ring-chart success" style="--percent:{{ dashboard_rings.done_share }}"><span>{{ dashboard_rings.done_share }}%</span></div>
-      <div class="ring-copy"><b>Закрыто успешно</b><small>{{ done_count }} из {{ total_count or 0 }}</small></div>
+      <div class="ring-copy"><b>Закрыто</b><small>{{ done_count }} из {{ total_count or 0 }}</small></div>
     </div>
     <div class="ring-card">
       <div class="ring-chart warning" style="--percent:{{ dashboard_rings.sla_safe }}"><span>{{ dashboard_rings.sla_safe }}%</span></div>
-      <div class="ring-copy"><b>SLA под контролем</b><small>{% if open_count %}{{ open_count - overdue }} без просрочки{% else %}Открытых заявок нет{% endif %}</small></div>
+      <div class="ring-copy"><b>SLA</b><small>{% if open_count %}{{ open_count - overdue }} без просрочки{% else %}Открытых заявок нет{% endif %}</small></div>
     </div>
   </div>
 </section>
-<section class="panel analytics-panel">
-  <div class="panelhead"><div><h2>Динамика заявок за 7 дней</h2><p class="muted">Линейный график новых обращений</p></div></div>
-  <div class="line-chart-card">
-    <svg class="line-chart" viewBox="0 0 360 180" preserveAspectRatio="none" aria-label="График новых заявок">
-      <line x1="20" y1="140" x2="340" y2="140" class="axis"></line>
-      <line x1="20" y1="40" x2="20" y2="140" class="axis"></line>
-      <polyline class="line-fill" points="20,140 {% for p in daily_series %}{{ p.x }},{{ p.y }} {% endfor %}340,140"></polyline>
-      <polyline class="line-main" points="{% for p in daily_series %}{{ p.x }},{{ p.y }} {% endfor %}"></polyline>
-      {% for p in daily_series %}
-        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4.5" class="line-dot"></circle>
-        <text x="{{ p.x }}" y="{{ p.y - 10 }}" text-anchor="middle" class="line-value">{{ p.count }}</text>
-        <text x="{{ p.x }}" y="160" text-anchor="middle" class="line-label">{{ p.label }}</text>
-      {% endfor %}
-    </svg>
-  </div>
-</section>
 </div>
-<div class="grid2">
+
+<div class="grid2 dashboard-bottom-grid">
 <section class="panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>
 <table class="responsive-table"><thead><tr><th>№</th><th>Заявка</th><th>Объект</th><th>Статус</th></tr></thead><tbody>
 {% for t in recent %}<tr><td data-label="№"><a href="/tickets/{{ t.id }}"><b>{{ t.number }}</b></a></td><td data-label="Заявка">{{ t.title }}</td><td data-label="Объект">{{ t.site.name }}</td><td data-label="Статус"><span class="badge s-{{t.status}}" style="{{badge_style('status',t.status)}}">{{ui_name('status',t.status,status_labels.get(t.status,t.status))}}</span></td></tr>{% else %}<tr><td class="empty-row" colspan="4">Заявок пока нет</td></tr>{% endfor %}
 </tbody></table></section>
-<section class="panel"><div class="panelhead"><h2>Заявки по статусам</h2></div><div class="status-list">
+<section class="panel"><div class="panelhead"><h2>Заявки по статусам</h2></div><div class="status-list compact-status-list">
 {% for status,count in by_status %}<div><span class="badge s-{{status}}" style="{{badge_style('status',status)}}">{{ui_name('status',status,status_labels.get(status,status))}}</span><b>{{ count }}</b></div>{% else %}<p>Нет данных</p>{% endfor %}
 </div></section>
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+window.addEventListener('load', function(){
+  if (!window.Chart) return;
+  const dailySeries = {{ daily_series | tojson }};
+  const statusPairs = {{ by_status | tojson }};
+  const labels = dailySeries.map(p => p.label);
+  const lineValues = dailySeries.map(p => p.count);
+  const statusLabels = statusPairs.map(x => x[0]);
+  const statusCounts = statusPairs.map(x => x[1]);
+  const palette = ['#2563eb','#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ef4444','#64748b','#14b8a6'];
+
+  const lineCanvas = document.getElementById('ticketsLineChart');
+  if (lineCanvas) {
+    const ctx = lineCanvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+    gradient.addColorStop(0, 'rgba(37,99,235,0.30)');
+    gradient.addColorStop(1, 'rgba(37,99,235,0.02)');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Новые заявки',
+          data: lineValues,
+          borderColor: '#2563eb',
+          backgroundColor: gradient,
+          fill: true,
+          tension: 0.38,
+          borderWidth: 3,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#2563eb',
+          pointBorderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {
+          legend: {display: false},
+          tooltip: {
+            backgroundColor: '#0f172a',
+            padding: 12,
+            displayColors: false,
+            titleColor: '#fff',
+            bodyColor: '#dbeafe',
+            callbacks: {label: (ctx) => ` ${ctx.raw} заяв.`}
+          }
+        },
+        scales: {
+          x: {grid: {display: false}, ticks: {color: '#64748b'}},
+          y: {beginAtZero: true, grid: {color: 'rgba(148,163,184,0.18)'}, ticks: {precision: 0, color: '#64748b'}}
+        }
+      }
+    });
+  }
+
+  const donut = document.getElementById('ticketStatusChart');
+  if (donut && statusCounts.length) {
+    new Chart(donut, {
+      type: 'doughnut',
+      data: {
+        labels: statusLabels,
+        datasets: [{data: statusCounts, backgroundColor: palette, borderWidth: 0, hoverOffset: 8}]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: {
+          legend: {display: false},
+          tooltip: {
+            backgroundColor: '#0f172a',
+            titleColor: '#fff',
+            bodyColor: '#dbeafe',
+            callbacks: {label: (ctx) => ` ${ctx.label}: ${ctx.raw}`}
+          }
+        }
+      }
+    });
+  }
+});
+</script>
 {% endblock %}

@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="icon" href="/static/icon-192.png">
 <link rel="stylesheet" href="/static/app.css?v={{ app_version }}">
+{% block extra_head %}{% endblock %}
 </head>
 <body class="{% if user %}app-body{% else %}anonymous-body{% endif %}">
 {% if user %}
@@ -117,4 +118,5 @@ window.openRoutePicker = function(address){
 window.closeRoutePicker = function(){ const modal=document.getElementById('route-picker'); if(modal) modal.classList.remove('open'); document.body.classList.remove('modal-open'); };
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeRoutePicker(); });
 </script>
+{% block extra_scripts %}{% endblock %}
 </body></html>

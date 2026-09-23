@@ -171,7 +171,7 @@ html{scroll-behavior:smooth}body{overflow-x:hidden}.content-inner{width:100%;max
 }
 
 
-/* FMTS v0.6.4 — mobile footer card + analytics charts */
+/* FMTS v0.6.5 — premium mobile UI + interactive analytics */
 .dashboard-analytics-grid{display:grid;grid-template-columns:1.05fr 1.2fr;gap:16px;margin-bottom:16px}
 .analytics-panel{overflow:hidden}
 .ring-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
@@ -201,3 +201,26 @@ html{scroll-behavior:smooth}body{overflow-x:hidden}.content-inner{width:100%;max
   .ring-card{padding:11px;gap:10px}.ring-chart{width:74px;height:74px;flex-basis:74px}.ring-chart::after{inset:8px}.ring-chart span{font-size:15px}
   .sidebar .userbox{padding:10px 2px 2px!important}.user-actions a{font-size:11px!important}
 }
+
+
+/* v0.6.5 premium mobile + interactive analytics */
+:root{--panel-shadow:0 14px 38px rgba(15,23,42,.08),0 4px 14px rgba(15,23,42,.05);--panel-border:#e7edf4;--soft-navy:#0f1b2d;--soft-navy-2:#14243a;--glass:#ffffff12}
+.panel,.metric{border-radius:20px;border-color:var(--panel-border);box-shadow:var(--panel-shadow)}
+.pagehead h1{letter-spacing:-.02em}.pagehead p{font-size:14px}
+.stat-card small{display:block;margin-top:8px;color:#8190a5;font-size:12px}.stat-card.primary{background:linear-gradient(135deg,#eff6ff 0,#ffffff 52%,#f7fbff 100%)}
+.dashboard-pro-grid,.kpi-pro-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:18px;margin-bottom:18px}
+.chart-panel{padding:20px 20px 18px;background:linear-gradient(180deg,#fff,#fbfdff)}
+.analytics-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:800;font-size:12px;border:1px solid #dbeafe}
+.chart-shell{position:relative;width:100%}.chart-shell-lg{height:320px}.chart-shell-donut{height:260px;max-width:300px}
+.donut-layout{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:18px;align-items:center}.donut-layout-kpi{grid-template-columns:minmax(220px,280px) 1fr}
+.status-legend,.compact-status-list{display:grid;gap:10px}.legend-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #edf2f7;border-radius:14px;background:#fbfdff}.legend-row b{font-size:15px;color:#0f172a}
+.mini-trend-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;margin-top:16px}.mini-trend{background:#f8fbff;border:1px solid #e7eef7;border-radius:14px;padding:10px 8px;text-align:center}.mini-trend span{display:block;color:#64748b;font-size:11px}.mini-trend b{display:block;margin-top:5px;font-size:16px;color:#0f172a}
+.upgraded-rings{margin-top:16px;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.ring-card{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid #edf2f7;border-radius:18px;background:linear-gradient(180deg,#fff,#fbfdff)}.ring-copy b{display:block;font-size:14px}.ring-copy small{display:block;color:#64748b;margin-top:3px;line-height:1.35}
+.user-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.user-actions a{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:12px;background:#21344f;color:#e6eef8;font-weight:700;line-height:1;min-height:34px;border:1px solid #2e4568;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}.user-actions a:hover{background:#29415f;color:#fff}
+.sidebar .user-meta{min-width:0}.sidebar .user-meta b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;font-size:14px;color:#fff}.sidebar .user-meta small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sidebar-bottom{display:flex;flex-direction:column;gap:10px}.install-nav{display:flex;align-items:center;justify-content:center;font-weight:800;min-height:50px;border-radius:16px!important;background:linear-gradient(180deg,#1e3a5f,#162842)!important;box-shadow:0 10px 24px rgba(7,16,32,.2)}.install-nav .nav-label{display:block!important;color:#f5f9ff}
+.sidebar .userbox{background:linear-gradient(180deg,#182539,#132133);border:1px solid #243852;box-shadow:0 12px 30px rgba(8,14,26,.22)}.user-avatar{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#315bff,#1f8eff);color:#fff;font-weight:900;font-size:20px;box-shadow:0 10px 22px rgba(37,99,235,.3)}
+.sidebar-head{padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:6px}.sidebar-nav .navitem{border:1px solid transparent;transition:.18s ease}.sidebar-nav .navitem.active{background:linear-gradient(90deg,rgba(37,99,235,.18),rgba(37,99,235,.06));border-color:rgba(96,165,250,.18);color:#fff}.sidebar-nav .navitem:hover{transform:translateX(2px)}
+.kpi-summary{grid-template-columns:repeat(6,minmax(140px,1fr))}.kpi-summary .metric strong{font-size:28px}.kpi-leader-card small{display:block;color:#64748b;margin-top:7px}
+@media(max-width:1180px){.dashboard-pro-grid,.kpi-pro-grid{grid-template-columns:1fr}.donut-layout,.donut-layout-kpi{grid-template-columns:1fr}.chart-shell-donut{max-width:none;height:280px}.mini-trend-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.kpi-summary{grid-template-columns:repeat(3,minmax(140px,1fr))}}
+@media(max-width:780px){.chart-shell-lg{height:260px}.chart-shell-donut{height:240px}.upgraded-rings{grid-template-columns:1fr}.donut-layout,.donut-layout-kpi{gap:14px}.mini-trend-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.dashboard-kpis,.kpi-summary{grid-template-columns:1fr 1fr}.sidebar-bottom{gap:12px}.sidebar .userbox{grid-template-columns:44px minmax(0,1fr)!important;grid-template-areas:'avatar meta' 'actions actions'!important;padding:12px 10px 10px!important}.user-actions{justify-content:flex-start}.user-actions a{flex:1 1 calc(50% - 4px);min-width:96px}.install-nav{min-height:52px}.install-nav .nav-icon{display:block!important}.install-nav .nav-label{display:block!important}}
+@media(max-width:420px){.dashboard-kpis,.kpi-summary{grid-template-columns:1fr}.mini-trend-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.user-actions a{flex:1 1 100%}.sidebar{width:min(94vw,346px)!important}.chart-shell-lg{height:230px}.chart-shell-donut{height:220px}.chart-panel{padding:16px}}

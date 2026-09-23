@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}KPI ремонтников — {{ app_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>{% endblock %}
 {% block content %}
 <div class="pagehead kpi-pagehead">
   <div><div class="eyebrow">ОТЧЁТ ЗА МЕСЯЦ</div><h1>Рейтинг ремонтников / KPI</h1><p>Период: <b>{{ period.label }}</b>. Показатели считаются по заявкам, закреплённым за исполнителем.</p></div>
@@ -27,36 +28,29 @@
   <div class="metric kpi-leader-card"><span>Лидер месяца</span><strong>{% if report.leader %}{{report.leader.name}}{% else %}—{% endif %}</strong>{% if report.leader %}<small>{{report.leader.score}}% · {{report.leader.rating}} / 5</small>{% endif %}</div>
 </div>
 
-<div class="dashboard-analytics-grid kpi-analytics-grid">
-  <section class="panel analytics-panel">
-    <div class="panelhead"><div><h2>Командная аналитика</h2><p class="muted">Круговые индикаторы ключевых показателей</p></div></div>
-    <div class="ring-grid">
-      <div class="ring-card">
-        <div class="ring-chart" style="--percent:{{ report.avg_kpi }}"><span>{{ report.avg_kpi }}%</span></div>
-        <div class="ring-copy"><b>Средний KPI</b><small>Команда за {{ period.label }}</small></div>
-      </div>
-      <div class="ring-card">
-        <div class="ring-chart success" style="--percent:{{ report.team_sla }}"><span>{{ report.team_sla }}%</span></div>
-        <div class="ring-copy"><b>SLA вовремя</b><small>Выполнено без просрочки</small></div>
-      </div>
-      <div class="ring-card">
-        <div class="ring-chart warning" style="--percent:{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}"><span>{{ report.total_points }}</span></div>
-        <div class="ring-copy"><b>Баллы работ</b><small>Суммарная нагрузка команды</small></div>
-      </div>
-    </div>
+<div class="dashboard-analytics-grid kpi-analytics-grid kpi-pro-grid">
+  <section class="panel analytics-panel chart-panel">
+    <div class="panelhead"><div><h2>Топ KPI по исполнителям</h2><p class="muted">Интерактивное сравнение итогового процента KPI</p></div></div>
+    <div class="chart-shell chart-shell-lg"><canvas id="kpiScoreChart"></canvas></div>
   </section>
-  <section class="panel analytics-panel">
-    <div class="panelhead"><div><h2>Топ KPI по исполнителям</h2><p class="muted">Сравнение по итоговому проценту KPI</p></div></div>
-    <div class="bars-list">
-      {% for x in report.rows[:6] %}
-      <div class="bar-row">
-        <div class="bar-copy"><b>{{ x.name }}</b><small>@{{ x.username }}</small></div>
-        <div class="bar-track"><i style="width:{{ x.score }}%"></i></div>
-        <div class="bar-value">{{ x.score }}%</div>
+  <section class="panel analytics-panel chart-panel">
+    <div class="panelhead"><div><h2>Командная сводка</h2><p class="muted">Круговая аналитика ключевых показателей</p></div></div>
+    <div class="donut-layout donut-layout-kpi">
+      <div class="chart-shell chart-shell-donut"><canvas id="kpiSummaryChart"></canvas></div>
+      <div class="ring-grid upgraded-rings">
+        <div class="ring-card">
+          <div class="ring-chart" style="--percent:{{ report.avg_kpi }}"><span>{{ report.avg_kpi }}%</span></div>
+          <div class="ring-copy"><b>Средний KPI</b><small>Команда за {{ period.label }}</small></div>
+        </div>
+        <div class="ring-card">
+          <div class="ring-chart success" style="--percent:{{ report.team_sla }}"><span>{{ report.team_sla }}%</span></div>
+          <div class="ring-copy"><b>SLA вовремя</b><small>Выполнено без просрочки</small></div>
+        </div>
+        <div class="ring-card">
+          <div class="ring-chart warning" style="--percent:{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}"><span>{{ report.total_points }}</span></div>
+          <div class="ring-copy"><b>Баллы работ</b><small>Суммарная нагрузка команды</small></div>
+        </div>
       </div>
-      {% else %}
-      <p class="muted">Нет данных для построения графика.</p>
-      {% endfor %}
     </div>
   </section>
 </div>
@@ -109,4 +103,60 @@
     <p class="muted kpi-note">Фактическое время берётся из таймера заявки и отображается в отчёте, но пока не влияет на итоговый балл KPI. Это сделано специально, чтобы не поощрять ни искусственное увеличение времени, ни слишком быстрое закрытие работ.</p><p class="muted kpi-note">Важно: текущая версия считает KPI по текущему исполнителю заявки. Если заявку переназначали между ремонтниками, история переназначений пока не распределяет вклад автоматически.</p>
   </section>
 </div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+window.addEventListener('load', function(){
+  if (!window.Chart) return;
+  const names = {{ report.rows[:8] | map(attribute='name') | list | tojson }};
+  const scores = {{ report.rows[:8] | map(attribute='score') | list | tojson }};
+  const tracked = {{ report.rows[:8] | map(attribute='tracked_hours') | list | tojson }};
+  const ctx = document.getElementById('kpiScoreChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: names,
+        datasets: [
+          {label: 'KPI, %', data: scores, borderRadius: 10, backgroundColor: ['#2563eb','#3b82f6','#60a5fa','#0ea5e9','#38bdf8','#8b5cf6','#10b981','#f59e0b']},
+          {label: 'Факт. время, ч', data: tracked, type: 'line', borderColor: '#0f172a', backgroundColor: '#0f172a', tension: 0.35, yAxisID: 'y1', pointRadius: 3, pointHoverRadius: 5}
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {mode: 'index', intersect: false},
+        plugins: {
+          legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 10}},
+          tooltip: {backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#e2e8f0'}
+        },
+        scales: {
+          x: {grid: {display: false}, ticks: {color: '#64748b'}},
+          y: {beginAtZero: true, max: 100, grid: {color: 'rgba(148,163,184,0.18)'}, ticks: {color: '#64748b', callback: (v) => v + '%'}},
+          y1: {beginAtZero: true, position: 'right', grid: {display: false}, ticks: {color: '#64748b', callback: (v) => v + ' ч'}}
+        }
+      }
+    });
+  }
+  const donut = document.getElementById('kpiSummaryChart');
+  if (donut) {
+    new Chart(donut, {
+      type: 'doughnut',
+      data: {
+        labels: ['SLA','Закрытие','Производительность','Документирование'],
+        datasets: [{data: [{{ ((report.weights.sla*100)|round|int) }},{{ ((report.weights.closure*100)|round|int) }},{{ ((report.weights.productivity*100)|round|int) }},{{ ((report.weights.documentation*100)|round|int) }}], backgroundColor: ['#2563eb','#10b981','#f59e0b','#8b5cf6'], borderWidth: 0, hoverOffset: 8}]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: {
+          legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 10}},
+          tooltip: {backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#e2e8f0', callbacks: {label: (ctx) => ` ${ctx.label}: ${ctx.raw}%`}}
+        }
+      }
+    });
+  }
+});
+</script>
 {% endblock %}
