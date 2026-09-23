@@ -1,12 +1,14 @@
 import secrets, os
 from datetime import date, timedelta, datetime
 from app.db import Base, engine, SessionLocal
-from app.models import User, Site, Equipment, Ticket, MaintenancePlan, InventoryItem, Contractor, TicketWorkSession
+from app.models import User, Site, Equipment, Ticket, MaintenancePlan, InventoryItem, Contractor, TicketWorkSession, ServiceCatalog, CustomField, KnowledgeArticle, AutomationRule
 from app.security import hash_password
+from app.migrations import run_lightweight_migrations
 from app.services.maintenance import next_ticket_number
 from app.services.reference_data import ensure_default_reference_data
 
 Base.metadata.create_all(bind=engine)
+run_lightweight_migrations(engine)
 db=SessionLocal()
 try:
     ensure_default_reference_data(db)
@@ -35,6 +37,17 @@ try:
             end=datetime.utcnow()-timedelta(minutes=15)
             start=end-timedelta(minutes=35)
             db.add(TicketWorkSession(ticket_id=t.id,user_id=tech.id,started_at=start,ended_at=end,duration_seconds=35*60,note="Первичная диагностика",source="manual"))
+
+
+    if not db.query(ServiceCatalog).first():
+        svc=ServiceCatalog(code="cold-service",name="Холодильное оборудование",description="Ремонт и обслуживание холодильного оборудования",category="Холодильное оборудование",default_priority="high",default_sla_hours=4)
+        db.add(svc); db.flush()
+        db.add_all([
+            CustomField(service_id=svc.id,code="current_temp",name="Текущая температура, °C",field_type="number",required=False,sort_order=10),
+            CustomField(service_id=svc.id,code="error_code",name="Код ошибки",field_type="text",required=False,sort_order=20),
+            KnowledgeArticle(title="Первичная диагностика холодильного оборудования",body="Проверьте питание, заданную и фактическую температуру, состояние вентиляторов и наличие кодов ошибок.",tags="холодильник, температура, диагностика",equipment_category="Холодильное оборудование",service_id=svc.id,created_by_id=admin.id if admin else None),
+            AutomationRule(name="Холодильное оборудование — автоназначение",conditions_json='{"category":"Холодильное оборудование"}',actions_json='{"assign_least_loaded":true,"set_priority":"high","sla_hours":4}',sort_order=10),
+        ])
 
     if not db.query(InventoryItem).first():
         db.add_all([InventoryItem(sku="ZIP-001",name="Вентилятор 230В",qty=3,min_qty=2,unit="шт",unit_cost=28000),InventoryItem(sku="ZIP-002",name="Фильтр кондиционера",qty=4,min_qty=5,unit="шт",unit_cost=6500),InventoryItem(sku="MAT-001",name="Хладагент",qty=12,min_qty=5,unit="кг",unit_cost=9000)])

@@ -2,9 +2,11 @@ import os
 from app.db import Base, engine, SessionLocal
 from app.models import User
 from app.security import hash_password
+from app.migrations import run_lightweight_migrations
 from app.services.reference_data import ensure_default_reference_data
 
 Base.metadata.create_all(bind=engine)
+run_lightweight_migrations(engine)
 db = SessionLocal()
 try:
     ensure_default_reference_data(db)
