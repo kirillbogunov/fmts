@@ -4,7 +4,11 @@
 <div class="login-logo">⚙</div><h1>FMTS</h1><p><b>Facility Management & Task System</b><br>Система задач и мониторинга работы хозяйственного отдела</p>
 {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 {% if next_url %}<input type="hidden" name="next_url" value="{{next_url}}">{% endif %}<label>Логин<input name="username" autocomplete="username" required></label>
+<<<<<<< HEAD
 <label>Пароль<input type="password" name="password" autocomplete="current-password" required></label>
+=======
+<label>Пароль<input type="password" name="password" autocomplete="current-password" required></label><label>Код 2FA <small class="muted">если включён</small><input name="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"></label>
+>>>>>>> c83dea0 (Первый коммит)
 <button class="btn primary" type="submit">Войти</button>
 <div class="hint">Первичный администратор задаётся в файле .env</div>
 <div class="developer-card">Разработчик: <b>{{ developer_name }}</b> © 2026<br><a href="{{ developer_url }}" target="_blank" rel="noopener">Telegram {{ developer_telegram }}</a></div>

@@ -1,0 +1,1 @@
+{% extends "base.html" %}{% block content %}<div class="pagehead"><div><div class="eyebrow">БАЗА ЗНАНИЙ</div><h1>{{article.title}}</h1><p>{{article.equipment_category}}{% if article.tags %} · {{article.tags}}{% endif %}</p></div><a class="btn" href="/knowledge">← Все статьи</a></div><article class="panel article-body">{{article.body}}</article>{% endblock %}

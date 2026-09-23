@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Header, Body
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.config import get_settings
+<<<<<<< HEAD
 from app.models import Site, Equipment, Ticket, InventoryItem, User, UiStyle
+=======
+from app.models import Site, Equipment, Ticket, InventoryItem, User, UiStyle, ServiceCatalog
+>>>>>>> c83dea0 (Первый коммит)
 from app.services.one_c import OneCClient, OneCError, pick
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.sync import ticket_to_1c_payload, push_ticket_to_1c, upsert_ticket_from_1c
@@ -12,6 +16,10 @@ from app.labels import STATUS_LABELS, PRIORITY_LABELS, EQUIPMENT_STATUS_LABELS
 from app.access import has_permission, require_permission, scope_ticket_query
 from app.security import current_user
 from app.services.ui_styles import upsert_ui_styles, styles_cache, display_name, badge_css, sla_hours_for
+<<<<<<< HEAD
+=======
+from app.services.automation import apply_ticket_rules
+>>>>>>> c83dea0 (Первый коммит)
 
 router = APIRouter(prefix="/api", tags=["api"])
 settings = get_settings()
@@ -83,7 +91,12 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
     if eq_id:
         eq=db.get(Equipment,eq_id)
         if not eq or eq.site_id!=site.id: raise HTTPException(400,"Оборудование не относится к выбранному объекту")
+<<<<<<< HEAD
     priority = str(payload.get("priority", "normal")) if has_permission(user,"ticket.set_priority") else "normal"
+=======
+    service=db.get(ServiceCatalog,int(payload.get("service_id"))) if payload.get("service_id") else None
+    priority = (service.default_priority if service and service.default_priority else (str(payload.get("priority", "normal")) if has_permission(user,"ticket.set_priority") else "normal"))
+>>>>>>> c83dea0 (Первый коммит)
     assignee_id=None
     if payload.get("assignee_id") and has_permission(user,"ticket.assign"):
         candidate=db.get(User,int(payload["assignee_id"]))
@@ -95,9 +108,15 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
                priority=priority, status="assigned" if assignee_id else "new", site_id=site.id,
                equipment_id=eq_id, requester_id=user.id, requester_name=user.full_name,
                requester_phone=str(payload.get("phone") or ""), room=str(payload.get("room") or ""),
+<<<<<<< HEAD
                assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""),
                sla_due_at=datetime.utcnow()+timedelta(hours=sla_hours))
     db.add(t); db.commit(); db.refresh(t)
+=======
+               assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""), service_id=(service.id if service else None),
+               sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
+    db.add(t); db.flush(); apply_ticket_rules(db,t); db.commit(); db.refresh(t)
+>>>>>>> c83dea0 (Первый коммит)
     push_ticket_to_1c(db, t)
     return {"id": t.id, "number": t.number, "one_c_id": t.one_c_id}
 
