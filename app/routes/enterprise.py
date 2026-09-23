@@ -11,7 +11,7 @@ from app.db import get_db
 from app.config import get_settings
 from app.models import (User, Site, Equipment, Ticket, ServiceCatalog, CustomField, TicketCustomValue,
     KnowledgeArticle, AutomationRule, Notification, PushSubscription, TicketLink, ApprovalRequest,
-    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability)
+    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, BusinessCalendar)
 from app.security import current_user, generate_totp_secret, verify_totp, totp_uri
 from app.access import has_permission, can_view_ticket, scope_ticket_query
 from app.routes.web import ctx, templates, forbidden
@@ -117,7 +117,7 @@ def services_page(request:Request,db:Session=Depends(get_db)):
     fields=db.query(CustomField).order_by(CustomField.service_id,CustomField.sort_order,CustomField.name).all()
     grouped=defaultdict(list)
     for f in fields: grouped[f.service_id].append(f)
-    return templates.TemplateResponse('services.html',ctx(request,db,rows=rows,fields_by_service=grouped,service_categories=category_options(db,'service')))
+    return templates.TemplateResponse('services.html',ctx(request,db,rows=rows,fields_by_service=grouped,service_categories=category_options(db,'service'),sla_calendars=db.query(BusinessCalendar).filter(BusinessCalendar.active==True).order_by(BusinessCalendar.name).all()))
 
 @router.post('/services/new')
 def service_new(request:Request,code:str=Form(...),name:str=Form(...),description:str=Form(''),category:str=Form('Другое'),default_priority:str=Form('normal'),default_sla_hours:str=Form(''),db:Session=Depends(get_db)):
@@ -183,10 +183,10 @@ def global_search(request:Request,q:str='',db:Session=Depends(get_db)):
     return templates.TemplateResponse('search.html',ctx(request,db,q=q,tickets=tickets,equipment=equipment,articles=articles))
 
 @router.post('/saved-filters/new')
-def saved_filter_new(request:Request,name:str=Form(...),status:str=Form(''),q:str=Form(''),priority:str=Form(''),site_id:str=Form(''),assignee_id:str=Form(''),db:Session=Depends(get_db)):
+def saved_filter_new(request:Request,name:str=Form(...),status:str=Form(''),q:str=Form(''),priority:str=Form(''),site_id:str=Form(''),assignee_id:str=Form(''),ticket_type:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
-    payload={k:v for k,v in {'status':status,'q':q,'priority':priority,'site_id':site_id,'assignee_id':assignee_id}.items() if v}
+    payload={k:v for k,v in {'status':status,'q':q,'priority':priority,'site_id':site_id,'assignee_id':assignee_id,'ticket_type':ticket_type}.items() if v}
     db.add(SavedFilter(user_id=u.id,name=name,filters_json=json.dumps(payload,ensure_ascii=False)));db.commit();return RedirectResponse('/tickets',303)
 
 @router.get('/saved-filters/{filter_id}/apply')

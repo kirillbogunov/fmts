@@ -17,6 +17,7 @@ from app.routes.operations import router as operations_router
 from app.routes.admin_services import router as admin_services_router
 from app.routes.assets_plus import router as assets_plus_router
 from app.routes.experience import router as experience_router
+from app.routes.itsm_plus import router as itsm_plus_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
@@ -27,6 +28,7 @@ from app.services.report_subscriptions import process_report_subscriptions
 from app.services.reminders import process_ticket_reminders
 from app.services.system_jobs import run_logged_job
 from app.services.zabbix_sync import sync_zabbix
+from app.services.webhooks import process_webhook_deliveries
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -45,6 +47,7 @@ async def enterprise_loop():
         run_logged_job("mailbox", poll_mailbox)
         run_logged_job("report_subscriptions", process_report_subscriptions)
         run_logged_job("ticket_reminders", process_ticket_reminders)
+        run_logged_job("webhook_deliveries", process_webhook_deliveries)
         await asyncio.sleep(max(30, settings.enterprise_loop_seconds))
 
 async def zabbix_loop():
@@ -96,6 +99,7 @@ app.include_router(operations_router)
 app.include_router(admin_services_router)
 app.include_router(assets_plus_router)
 app.include_router(experience_router)
+app.include_router(itsm_plus_router)
 app.include_router(web_router)
 
 

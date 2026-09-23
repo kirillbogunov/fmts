@@ -272,3 +272,57 @@ _original_run_lightweight_migrations_v073 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v073(engine)
     _run_v074_experience(engine)
+
+# v0.7.5: advanced ITSM fields, business-time SLA and outbound integrations.
+def _run_v075_itsm(engine: Engine) -> None:
+    dt_type = "DATETIME NULL" if engine.dialect.name == "sqlite" else "TIMESTAMP NULL"
+
+    ticket_cols = _columns(engine, "tickets")
+    if ticket_cols:
+        additions = {
+            "ticket_type": "VARCHAR(30) DEFAULT 'incident'",
+            "planned_start_at": dt_type,
+            "planned_end_at": dt_type,
+            "response_due_at": dt_type,
+            "first_response_at": dt_type,
+            "business_calendar_id": "INTEGER NULL",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in ticket_cols:
+                    conn.execute(text(f"ALTER TABLE tickets ADD COLUMN {name} {ddl}"))
+            conn.execute(text("UPDATE tickets SET ticket_type='incident' WHERE ticket_type IS NULL OR ticket_type=''"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_ticket_type ON tickets (ticket_type)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_planned_start_at ON tickets (planned_start_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_planned_end_at ON tickets (planned_end_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_business_calendar_id ON tickets (business_calendar_id)"))
+
+    service_cols = _columns(engine, "service_catalog")
+    if service_cols:
+        additions = {
+            "response_sla_minutes": "INTEGER NULL",
+            "resolution_sla_minutes": "INTEGER NULL",
+            "business_calendar_id": "INTEGER NULL",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in service_cols:
+                    conn.execute(text(f"ALTER TABLE service_catalog ADD COLUMN {name} {ddl}"))
+            # Existing service SLA remains the fallback resolution target.
+            conn.execute(text("UPDATE service_catalog SET resolution_sla_minutes=default_sla_hours*60 WHERE resolution_sla_minutes IS NULL AND default_sla_hours IS NOT NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_service_catalog_business_calendar_id ON service_catalog (business_calendar_id)"))
+
+    tables = inspect(engine).get_table_names()
+    if "business_calendars" in tables:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO business_calendars (name, timezone, weekdays, work_start, work_end, holidays_json, active, created_at)
+                SELECT 'Основной график', 'Asia/Almaty', '0,1,2,3,4', '09:00', '18:00', '[]', TRUE, CURRENT_TIMESTAMP
+                 WHERE NOT EXISTS (SELECT 1 FROM business_calendars)
+            """))
+
+_original_run_lightweight_migrations_v074 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v074(engine)
+    _run_v075_itsm(engine)

@@ -14,6 +14,9 @@ from app.security import current_user
 from app.services.ui_styles import upsert_ui_styles, styles_cache, display_name, badge_css, sla_hours_for
 from app.services.automation import apply_ticket_rules
 from app.services.ticket_lifecycle import ensure_initial_history
+from app.services.sla_calendar import apply_service_sla
+from app.services.webhooks import enqueue_ticket_event
+from app.services.itsm import TICKET_TYPES
 
 router = APIRouter(prefix="/api", tags=["api"])
 settings = get_settings()
@@ -55,7 +58,7 @@ def tickets(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(403,"Недостаточно прав")
     rows = scope_ticket_query(db.query(Ticket),user).order_by(Ticket.id.desc()).limit(500).all()
     ui=styles_cache(db)
-    return [{"id":x.id,"number":x.number,"title":x.title,"status":x.status,
+    return [{"id":x.id,"number":x.number,"title":x.title,"ticket_type":x.ticket_type,"status":x.status,
              "status_name":display_name(ui,"status",x.status,STATUS_LABELS.get(x.status,x.status)),
              "status_style":ui.get("status",{}).get(x.status,{}),
              "priority":x.priority,"priority_name":display_name(ui,"priority",x.priority,PRIORITY_LABELS.get(x.priority,x.priority)),
@@ -63,7 +66,7 @@ def tickets(request: Request, db: Session = Depends(get_db)):
              "category":x.category,"category_name":display_name(ui,"category",x.category,x.category),
              "category_style":ui.get("category",{}).get(x.category,{}),
              "site":x.site.name,"equipment":x.equipment.name if x.equipment else None,
-             "created_at":x.created_at.isoformat(),"sla_due_at":x.sla_due_at.isoformat() if x.sla_due_at else None,
+             "created_at":x.created_at.isoformat(),"sla_due_at":x.sla_due_at.isoformat() if x.sla_due_at else None,"response_due_at":x.response_due_at.isoformat() if x.response_due_at else None,"first_response_at":x.first_response_at.isoformat() if x.first_response_at else None,
              "web_id":x.web_uid,"requester_name":x.requester_name,"phone":x.requester_phone,"room":x.room,"master":x.master_name,
              "labor_cost":float(x.labor_cost or 0),"parts_cost":float(x.parts_cost or 0),"one_c_id":x.one_c_id,
              "onec_synced_at":x.onec_synced_at.isoformat() if x.onec_synced_at else None,
@@ -93,14 +96,17 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
         if not candidate or not candidate.active or candidate.role!="technician": raise HTTPException(400,"Исполнителем может быть только активный техник")
         assignee_id=candidate.id
     sla_hours = sla_hours_for(db, priority)
+    ticket_type=str(payload.get("ticket_type") or "incident")
+    if ticket_type not in TICKET_TYPES: ticket_type="incident"
+    if not has_permission(user,"itsm.view") and ticket_type not in {"incident","request"}: ticket_type="request"
     t = Ticket(number=next_ticket_number(db), title=str(payload.get("title") or "Без названия"),
                description=str(payload.get("description") or ""), category=str(payload.get("category") or "Другое"),
                priority=priority, status="assigned" if assignee_id else "new", site_id=site.id,
                equipment_id=eq_id, requester_id=user.id, creator_id=user.id, requester_name=user.full_name,
                requester_phone=str(payload.get("phone") or ""), room=str(payload.get("room") or ""),
-               assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""), service_id=(service.id if service else None),
-               sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
-    db.add(t); db.flush(); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=user.id,source="api"); db.commit(); db.refresh(t)
+               assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""), service_id=(service.id if service else None),ticket_type=ticket_type)
+    apply_service_sla(db,t,service,fallback_resolution_minutes=sla_hours*60)
+    db.add(t); db.flush(); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=user.id,source="api"); enqueue_ticket_event(db,"ticket.created",t); db.commit(); db.refresh(t)
     push_ticket_to_1c(db, t)
     return {"id": t.id, "number": t.number, "one_c_id": t.one_c_id}
 

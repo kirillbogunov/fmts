@@ -20,6 +20,8 @@ from app.services.notifications import notify_user
 from app.services.operations import pick_group_assignee, sync_group_observers
 from app.services.ui_styles import sla_hours_for
 from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket
+from app.services.sla_calendar import apply_service_sla
+from app.services.webhooks import enqueue_ticket_event
 
 router = APIRouter()
 
@@ -188,10 +190,10 @@ def ticket_bulk(
                 category=t.category, priority=t.priority, status='new', site_id=t.site_id,
                 equipment_id=t.equipment_id, requester_id=t.requester_id, creator_id=u.id,
                 requester_name=t.requester_name, requester_phone=t.requester_phone, room=t.room,
-                service_id=t.service_id, group_id=t.group_id, template_id=t.template_id,
-                sla_due_at=datetime.utcnow() + timedelta(hours=sla_hours_for(db, t.priority)),
+                service_id=t.service_id, group_id=t.group_id, template_id=t.template_id,ticket_type=t.ticket_type,
             )
-            db.add(copy); db.flush(); ensure_initial_history(db,copy,user_id=u.id,source='duplicate')
+            apply_service_sla(db,copy,db.get(ServiceCatalog,t.service_id) if t.service_id else None,fallback_resolution_minutes=sla_hours_for(db,t.priority)*60)
+            db.add(copy); db.flush(); ensure_initial_history(db,copy,user_id=u.id,source='duplicate'); enqueue_ticket_event(db,'ticket.created',copy,{'source':'duplicate','copied_from':t.id})
             db.add(TicketLink(ticket_id=t.id, linked_ticket_id=copy.id, link_type='duplicate', created_by_id=u.id))
             db.add(TicketLink(ticket_id=copy.id, linked_ticket_id=t.id, link_type='duplicate', created_by_id=u.id))
             sync_group_observers(db, copy); changed += 1
@@ -285,9 +287,9 @@ def ticket_template_instantiate(
         site_id=site.id, equipment_id=eq_id, requester_id=requester.id, creator_id=u.id,
         requester_name=requester.full_name, requester_phone=requester.phone or '', assignee_id=assignee.id if assignee else None,
         master_name=assignee.full_name if assignee else '', group_id=group_id, service_id=tpl.service_id, template_id=tpl.id,
-        sla_due_at=datetime.utcnow() + timedelta(hours=sla),
     )
-    db.add(root); db.flush(); ensure_initial_history(db,root,user_id=u.id,source='template'); sync_group_observers(db, root)
+    apply_service_sla(db,root,db.get(ServiceCatalog,tpl.service_id) if tpl.service_id else None,fallback_resolution_minutes=sla*60)
+    db.add(root); db.flush(); ensure_initial_history(db,root,user_id=u.id,source='template'); sync_group_observers(db, root); enqueue_ticket_event(db,'ticket.created',root,{'source':'template'})
     for task in db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == tpl.id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id).all():
         child_assignee = pick_group_assignee(db, group_id) if group_id else None
         child = Ticket(
@@ -296,9 +298,9 @@ def ticket_template_instantiate(
             site_id=site.id, equipment_id=eq_id, requester_id=requester.id, creator_id=u.id,
             requester_name=requester.full_name, requester_phone=requester.phone or '', assignee_id=child_assignee.id if child_assignee else None,
             master_name=child_assignee.full_name if child_assignee else '', group_id=group_id, service_id=tpl.service_id, template_id=tpl.id,
-            sla_due_at=datetime.utcnow() + timedelta(hours=sla),
         )
-        db.add(child); db.flush(); ensure_initial_history(db,child,user_id=u.id,source='template'); sync_group_observers(db, child)
+        apply_service_sla(db,child,db.get(ServiceCatalog,tpl.service_id) if tpl.service_id else None,fallback_resolution_minutes=sla*60)
+        db.add(child); db.flush(); ensure_initial_history(db,child,user_id=u.id,source='template'); sync_group_observers(db, child); enqueue_ticket_event(db,'ticket.created',child,{'source':'template','parent_ticket_id':root.id})
         db.add(TicketLink(ticket_id=root.id, linked_ticket_id=child.id, link_type='child', created_by_id=u.id))
         db.add(TicketLink(ticket_id=child.id, linked_ticket_id=root.id, link_type='parent', created_by_id=u.id))
     db.commit()

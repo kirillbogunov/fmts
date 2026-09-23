@@ -48,8 +48,10 @@
     {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}"><span class="nav-icon">◉</span><span class="nav-label">{{tr('contractors')}}</span></a>{% endif %}
     {% if nav.resources %}<a href="/resources" class="navitem {% if path.startswith('/resources') %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">{{tr('resources')}}</span></a>{% endif %}
 
-    {% if nav.services or nav.knowledge or nav.templates or nav.automation or nav.categories or nav.surveys %}<div class="nav-section"><span>{{tr('service_desk')}}</span></div>{% endif %}
+    {% if nav.services or nav.knowledge or nav.templates or nav.automation or nav.categories or nav.surveys or nav.itsm or nav.sla_calendars %}<div class="nav-section"><span>{{tr('service_desk')}}</span></div>{% endif %}
     {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">{{tr('services')}}</span></a>{% endif %}
+    {% if nav.itsm %}<a href="/itsm" class="navitem {% if path.startswith('/itsm') %}active{% endif %}"><span class="nav-icon">◆</span><span class="nav-label">{{tr('itsm')}}</span></a>{% endif %}
+    {% if nav.sla_calendars %}<a href="/sla-calendars" class="navitem {% if path.startswith('/sla-calendars') %}active{% endif %}"><span class="nav-icon">◴</span><span class="nav-label">{{tr('sla_calendars')}}</span></a>{% endif %}
     {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}"><span class="nav-icon">▧</span><span class="nav-label">{{tr('knowledge')}}</span></a>{% endif %}
     {% if nav.templates %}<a href="/ticket-templates" class="navitem {% if path.startswith('/ticket-templates') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">{{tr('templates')}}</span></a>{% endif %}
     {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}"><span class="nav-icon nav-icon-accent">⚡</span><span class="nav-label">{{tr('automation')}}</span></a>{% endif %}

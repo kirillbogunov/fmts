@@ -47,7 +47,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inventory.view",
         "contractor.view", "contractor.manage",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "report.builder",
-        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester", "data.import", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self",
+        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester", "data.import", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self", "itsm.view", "cmdb.relation.manage",
     },
     ROLE_MANAGER: {
         "dashboard.view",
@@ -58,7 +58,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "contractor.view", "kpi.all", "audit.view",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "approval.decide", "report.builder",
         "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
-        "labor.report", "labor.rate.manage", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self",
+        "labor.report", "labor.rate.manage", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self", "itsm.view", "sla.manage", "cmdb.relation.manage",
     },
     ROLE_ADMIN: {
         "*",
@@ -208,6 +208,8 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "resources": bool(user and has_permission(user, "resource.view")),
         "surveys": bool(user and (has_permission(user, "survey.manage") or has_permission(user, "survey.respond"))),
         "subscriptions": bool(user and has_permission(user, "subscription.self")),
+        "itsm": bool(user and has_permission(user, "itsm.view")),
+        "sla_calendars": bool(user and has_permission(user, "sla.manage")),
     }
 
 

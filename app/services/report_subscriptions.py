@@ -27,6 +27,8 @@ def _apply_saved_filter(q, payload: dict):
         q = q.filter(Ticket.status == payload['status'])
     if payload.get('priority'):
         q = q.filter(Ticket.priority == payload['priority'])
+    if payload.get('ticket_type'):
+        q = q.filter(Ticket.ticket_type == payload['ticket_type'])
     if payload.get('site_id'):
         try: q = q.filter(Ticket.site_id == int(payload['site_id']))
         except Exception: pass

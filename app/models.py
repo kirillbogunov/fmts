@@ -79,6 +79,12 @@ class Ticket(Base):
     sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sla_paused_seconds: Mapped[int] = mapped_column(Integer, default=0)
     edit_version: Mapped[int] = mapped_column(Integer, default=1)
+    ticket_type: Mapped[str] = mapped_column(String(30), default="incident", index=True)
+    planned_start_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    planned_end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    response_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    first_response_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    business_calendar_id: Mapped[int | None] = mapped_column(ForeignKey("business_calendars.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -103,6 +109,7 @@ class Ticket(Base):
     assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id])
     group: Mapped[SupportGroup | None] = relationship(foreign_keys=[group_id])
     template: Mapped[TicketTemplate | None] = relationship(foreign_keys=[template_id])
+    business_calendar: Mapped[BusinessCalendar | None] = relationship(foreign_keys=[business_calendar_id])
     contractor: Mapped[Contractor | None] = relationship()
     comments: Mapped[list[TicketComment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
     attachments: Mapped[list[Attachment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
@@ -256,7 +263,11 @@ class ServiceCatalog(Base):
     category: Mapped[str] = mapped_column(String(100), default="Другое")
     default_priority: Mapped[str] = mapped_column(String(20), default="normal")
     default_sla_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_sla_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolution_sla_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    business_calendar_id: Mapped[int | None] = mapped_column(ForeignKey("business_calendars.id"), nullable=True, index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    business_calendar: Mapped[BusinessCalendar | None] = relationship()
 
 class CustomField(Base):
     __tablename__ = "custom_fields"
@@ -578,3 +589,54 @@ class ResourceBooking(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resource: Mapped[Resource] = relationship()
     user: Mapped[User] = relationship()
+
+
+# ---- Advanced ITSM / SLA / CMDB / Webhooks extension v0.7.5 ----
+class BusinessCalendar(Base):
+    __tablename__ = "business_calendars"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Almaty")
+    weekdays: Mapped[str] = mapped_column(String(30), default="0,1,2,3,4")
+    work_start: Mapped[str] = mapped_column(String(5), default="09:00")
+    work_end: Mapped[str] = mapped_column(String(5), default="18:00")
+    holidays_json: Mapped[str] = mapped_column(Text, default="[]")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class EquipmentRelation(Base):
+    __tablename__ = "equipment_relations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), index=True)
+    target_equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id"), index=True)
+    relation_type: Mapped[str] = mapped_column(String(40), default="depends_on", index=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    source: Mapped[Equipment] = relationship(foreign_keys=[source_equipment_id])
+    target: Mapped[Equipment] = relationship(foreign_keys=[target_equipment_id])
+    created_by: Mapped[User | None] = relationship()
+
+class WebhookEndpoint(Base):
+    __tablename__ = "webhook_endpoints"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    url: Mapped[str] = mapped_column(String(500))
+    secret: Mapped[str] = mapped_column(String(180), default="")
+    events: Mapped[str] = mapped_column(String(500), default="ticket.created,ticket.updated,ticket.comment")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    endpoint_id: Mapped[int] = mapped_column(ForeignKey("webhook_endpoints.id"), index=True)
+    event_name: Mapped[str] = mapped_column(String(80), index=True)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    endpoint: Mapped[WebhookEndpoint] = relationship()

@@ -9,6 +9,8 @@ from app.models import Site, Ticket, User, TicketComment, TicketObserver, EmailR
 from app.services.maintenance import next_ticket_number
 from app.services.automation import apply_ticket_rules
 from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket
+from app.services.sla_calendar import mark_first_response
+from app.services.webhooks import enqueue_ticket_event
 from app.services.operations import pick_group_assignee
 from app.access import can_change_ticket_status
 settings=get_settings()
@@ -101,19 +103,21 @@ def process_message(db:Session,msg)->tuple[str,int|None]:
     existing=db.query(Ticket).filter(Ticket.number==match.group(0).upper()).first() if match else None
     if existing:
         db.add(TicketComment(ticket_id=existing.id,user_id=u.id if u else None,body=(body or f'E-mail от {sender_email}')[:12000]))
+        if u and u.role!='requester': mark_first_response(db,existing,actor_role=u.role)
         _add_known_observers(db,existing,recipients,u.id if u else None)
         cmd=_extract_status_command(subject,body)
         if cmd and u:
             decision=can_change_ticket_status(u,existing,cmd)
             if decision.allowed:
                 transition_ticket(db,existing,cmd,user_id=u.id,source='email')
+        enqueue_ticket_event(db,'ticket.comment',existing,{'source':'email','author_id':u.id if u else None,'comment':(body or '')[:1000]})
         return 'comment',existing.id
     site=db.get(Site,settings.imap_default_site_id)
     if not site: raise RuntimeError('IMAP_DEFAULT_SITE_ID не указывает на существующий объект')
     t=Ticket(number=next_ticket_number(db),title=subject[:220],description=body,category='Другое',priority='normal',status='new',site_id=site.id,
              requester_id=u.id if u else None,creator_id=u.id if u else None,requester_name=(u.full_name if u else sender_name or sender_email or 'E-mail'),requester_phone='',room='',
              sla_due_at=datetime.utcnow()+timedelta(hours=24))
-    db.add(t); db.flush(); _apply_email_rule(db,t,sender_email,subject,recipients); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=(u.id if u else None),source='email'); _add_known_observers(db,t,recipients,u.id if u else None)
+    db.add(t); db.flush(); _apply_email_rule(db,t,sender_email,subject,recipients); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=(u.id if u else None),source='email'); _add_known_observers(db,t,recipients,u.id if u else None); enqueue_ticket_event(db,'ticket.created',t,{'source':'email'})
     return 'ticket',t.id
 
 def poll_mailbox(db:Session)->int:

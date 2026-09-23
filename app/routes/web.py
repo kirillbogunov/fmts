@@ -13,7 +13,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.one_c import OneCClient
@@ -34,6 +34,9 @@ from app.services.notifications import notify_user
 from app.services.operations import pick_group_assignee, sync_group_observers
 from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket, effective_sla_due, status_timeline
 from app.services.categories import category_options
+from app.services.sla_calendar import apply_service_sla, mark_first_response, parse_local_to_utc
+from app.services.webhooks import enqueue_ticket_event
+from app.services.itsm import TICKET_TYPES, RELATION_LABELS
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -340,7 +343,7 @@ def kpi_report_csv(request:Request, month:str="", db:Session=Depends(get_db)):
     return Response(content=payload,media_type="text/csv; charset=utf-8",headers=headers)
 
 @router.get("/tickets", response_class=HTMLResponse)
-def tickets(request:Request,status:str="",q:str="",priority:str="",site_id:str="",assignee_id:str="",db:Session=Depends(get_db)):
+def tickets(request:Request,status:str="",q:str="",priority:str="",site_id:str="",assignee_id:str="",ticket_type:str="",db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"ticket.list") and not has_permission(u,"ticket.list_all"):
@@ -350,10 +353,11 @@ def tickets(request:Request,status:str="",q:str="",priority:str="",site_id:str="
     if priority: query=query.filter(Ticket.priority==priority)
     if site_id: query=query.filter(Ticket.site_id==int(site_id))
     if assignee_id: query=query.filter(Ticket.assignee_id==int(assignee_id))
+    if ticket_type: query=query.filter(Ticket.ticket_type==ticket_type)
     if q: query=query.filter((Ticket.title.contains(q)) | (Ticket.number.contains(q)) | (Ticket.description.contains(q)) | (Ticket.requester_name.contains(q)))
     rows=query.order_by(Ticket.id.desc()).all()
     time_totals=ticket_time_totals(db,[x.id for x in rows])
-    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all(),support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.bulk") else []))
+    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,ticket_type=ticket_type,ticket_types=TICKET_TYPES,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all(),support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.bulk") else []))
 
 @router.get("/tickets/new", response_class=HTMLResponse)
 def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get_db)):
@@ -364,10 +368,10 @@ def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get
     technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.assign") else []
     requesters=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.set_requester") else [u]
     groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else []
-    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,requesters=requesters,groups=groups,selected_equipment_id=equipment_id,categories=(category_options(db,"ticket") or options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]])),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
+    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,requesters=requesters,groups=groups,ticket_types=TICKET_TYPES,selected_equipment_id=equipment_id,categories=(category_options(db,"ticket") or options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]])),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
 
 @router.post("/tickets/new")
-async def ticket_create(request:Request,title:str=Form(...),description:str=Form(""),category:str=Form("Другое"),priority:str=Form("normal"),service_id:str=Form(""),site_id:int=Form(...),equipment_id:str=Form(""),requester_id:str=Form(""),assignee_id:str=Form(""),group_id:str=Form(""),room:str=Form(""),phone:str=Form(""),attachment:UploadFile|None=File(None),db:Session=Depends(get_db)):
+async def ticket_create(request:Request,title:str=Form(...),description:str=Form(""),category:str=Form("Другое"),priority:str=Form("normal"),service_id:str=Form(""),site_id:int=Form(...),equipment_id:str=Form(""),requester_id:str=Form(""),assignee_id:str=Form(""),group_id:str=Form(""),room:str=Form(""),phone:str=Form(""),ticket_type:str=Form("incident"),planned_start_at:str=Form(""),planned_end_at:str=Form(""),attachment:UploadFile|None=File(None),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"ticket.create"):
@@ -407,9 +411,15 @@ async def ticket_create(request:Request,title:str=Form(...),description:str=Form
         picked=pick_group_assignee(db,new_group_id)
         if picked: new_assignee_id=picked.id
     sla_hours=sla_hours_for(db,effective_priority)
+    ticket_type=ticket_type if ticket_type in TICKET_TYPES else "incident"
+    if not has_permission(u,"itsm.view") and ticket_type not in {"incident","request"}: ticket_type="request"
+    planned_start=parse_local_to_utc(planned_start_at,u.timezone)
+    planned_end=parse_local_to_utc(planned_end_at,u.timezone)
+    if planned_start and planned_end and planned_end<=planned_start: planned_end=None
     t=Ticket(number=next_ticket_number(db),title=title,description=description,category=category,priority=effective_priority,status="assigned" if (new_assignee_id or new_group_id) else "new",site_id=site_id,
              equipment_id=eq_id,requester_id=requester.id,creator_id=u.id,requester_name=requester.full_name,requester_phone=(phone or requester.phone or ""),room=room,
-             assignee_id=new_assignee_id,group_id=new_group_id,master_name="",service_id=(service.id if service else None),sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
+             assignee_id=new_assignee_id,group_id=new_group_id,master_name="",service_id=(service.id if service else None),ticket_type=ticket_type,planned_start_at=planned_start,planned_end_at=planned_end)
+    apply_service_sla(db,t,service,fallback_resolution_minutes=sla_hours*60)
     if new_assignee_id:
         assigned=db.get(User,new_assignee_id); t.master_name=assigned.full_name if assigned else ""
     db.add(t); db.flush()
@@ -427,6 +437,7 @@ async def ticket_create(request:Request,title:str=Form(...),description:str=Form
         stored=f"{secrets.token_hex(16)}{ext}"
         with open(Path(settings.upload_dir)/stored,"wb") as f: f.write(attachment.file.read())
         db.add(Attachment(ticket_id=t.id,filename=attachment.filename,stored_name=stored))
+    enqueue_ticket_event(db,"ticket.created",t)
     db.commit(); db.refresh(t)
     audit(db,request,u,"ticket.create",entity_type="ticket",entity_id=t.id,details=f"{t.number}: {t.title}")
     push_ticket_to_1c(db,t)
@@ -466,7 +477,7 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
         observers=db.query(TicketObserver).filter(TicketObserver.ticket_id==t.id).order_by(TicketObserver.id).all(),
         participant_users=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.observe") else [],
         support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else [],
-        lifecycle=lifecycle,reminders=reminders,sla_display_due=sla_display_due))
+        lifecycle=lifecycle,reminders=reminders,sla_display_due=sla_display_due,ticket_types=TICKET_TYPES))
 
 @router.post("/tickets/{ticket_id}/update")
 def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),group_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),edit_version:int=Form(1),db:Session=Depends(get_db)):
@@ -566,6 +577,9 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
         close_active_for_ticket(db,t.id,now)
     elif effective_status not in ("resolved","closed") and t.resolved_at:
         t.resolved_at=None
+    if u.role != "requester" and (status_changed or requested_assignee is not None or (master_comment or "").strip()):
+        mark_first_response(db,t,actor_role=u.role,when=now)
+    enqueue_ticket_event(db,"ticket.updated",t,{"previous_status":old_status})
     db.commit(); db.refresh(t)
     if t.assignee_id and t.assignee_id!=old_assignee_id:
         notify_user(db,db.get(User,t.assignee_id),f"Назначена заявка {t.number}",t.title,f"/tickets/{t.id}",dedup_key=f"assigned:{t.id}:{t.assignee_id}")
@@ -686,6 +700,8 @@ def ticket_comment(ticket_id:int,request:Request,body:str=Form(""),photos:list[U
             target=Path(settings.upload_dir)/stored
             target.write_bytes(data); created_paths.append(target)
             db.add(Attachment(ticket_id=ticket_id,comment_id=comment.id,filename=filename,stored_name=stored))
+        if u.role != "requester": mark_first_response(db,t,actor_role=u.role)
+        enqueue_ticket_event(db,"ticket.comment",t,{"comment_id":comment.id,"comment":text[:1000],"author_id":u.id})
         db.commit()
     except Exception:
         db.rollback()
@@ -845,7 +861,7 @@ def equipment_detail(equipment_id:int,request:Request,db:Session=Depends(get_db)
     if u.role=="technician": plans_q=plans_q.filter(MaintenancePlan.assignee_id==u.id)
     plans=plans_q.all()
     total=sum(float(x.labor_cost or 0)+float(x.parts_cost or 0) for x in history) if has_permission(u,"ticket.cost") else None
-    return templates.TemplateResponse("equipment_detail.html",ctx(request,db,eq=eq,history=history,plans=plans,total_cost=total,parent_equipment=db.get(Equipment,eq.parent_id) if eq.parent_id else None,child_equipment=db.query(Equipment).filter(Equipment.parent_id==eq.id).order_by(Equipment.name).all(),owner=db.get(User,eq.owner_user_id) if eq.owner_user_id else None))
+    return templates.TemplateResponse("equipment_detail.html",ctx(request,db,eq=eq,history=history,plans=plans,total_cost=total,parent_equipment=db.get(Equipment,eq.parent_id) if eq.parent_id else None,child_equipment=db.query(Equipment).filter(Equipment.parent_id==eq.id).order_by(Equipment.name).all(),owner=db.get(User,eq.owner_user_id) if eq.owner_user_id else None,relation_out=db.query(EquipmentRelation).filter(EquipmentRelation.source_equipment_id==eq.id).order_by(EquipmentRelation.id.desc()).all(),relation_in=db.query(EquipmentRelation).filter(EquipmentRelation.target_equipment_id==eq.id).order_by(EquipmentRelation.id.desc()).all(),relation_labels=RELATION_LABELS,relation_equipment=db.query(Equipment).filter(Equipment.id!=eq.id).order_by(Equipment.name).all() if has_permission(u,"cmdb.relation.manage") else []))
 
 @router.get("/equipment/{equipment_id}/qr.png")
 def equipment_qr(equipment_id:int,request:Request,db:Session=Depends(get_db)):
