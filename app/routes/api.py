@@ -13,6 +13,7 @@ from app.access import has_permission, require_permission, scope_ticket_query
 from app.security import current_user
 from app.services.ui_styles import upsert_ui_styles, styles_cache, display_name, badge_css, sla_hours_for
 from app.services.automation import apply_ticket_rules
+from app.services.ticket_lifecycle import ensure_initial_history
 
 router = APIRouter(prefix="/api", tags=["api"])
 settings = get_settings()
@@ -95,11 +96,11 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
     t = Ticket(number=next_ticket_number(db), title=str(payload.get("title") or "Без названия"),
                description=str(payload.get("description") or ""), category=str(payload.get("category") or "Другое"),
                priority=priority, status="assigned" if assignee_id else "new", site_id=site.id,
-               equipment_id=eq_id, requester_id=user.id, requester_name=user.full_name,
+               equipment_id=eq_id, requester_id=user.id, creator_id=user.id, requester_name=user.full_name,
                requester_phone=str(payload.get("phone") or ""), room=str(payload.get("room") or ""),
                assignee_id=assignee_id, master_name=(candidate.full_name if assignee_id else ""), service_id=(service.id if service else None),
                sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
-    db.add(t); db.flush(); apply_ticket_rules(db,t); db.commit(); db.refresh(t)
+    db.add(t); db.flush(); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=user.id,source="api"); db.commit(); db.refresh(t)
     push_ticket_to_1c(db, t)
     return {"id": t.id, "number": t.number, "one_c_id": t.one_c_id}
 

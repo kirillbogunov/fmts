@@ -67,6 +67,9 @@ class Ticket(Base):
     creator_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     group_id: Mapped[int | None] = mapped_column(ForeignKey("support_groups.id"), nullable=True, index=True)
     template_id: Mapped[int | None] = mapped_column(ForeignKey("ticket_templates.id"), nullable=True, index=True)
+    sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sla_paused_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    edit_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -420,3 +423,30 @@ class TicketTemplateTask(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
     template: Mapped[TicketTemplate] = relationship()
+
+
+# ---- ServiceDesk lifecycle extension v0.7.1 ----
+class TicketStatusHistory(Base):
+    __tablename__ = "ticket_status_history"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    from_status: Mapped[str] = mapped_column(String(30), default="")
+    to_status: Mapped[str] = mapped_column(String(30), index=True)
+    changed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    previous_duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(30), default="web")
+    changed_by: Mapped[User | None] = relationship()
+
+class TicketReminder(Base):
+    __tablename__ = "ticket_reminders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    remind_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    note: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    user: Mapped[User] = relationship()
+    ticket: Mapped[Ticket] = relationship()

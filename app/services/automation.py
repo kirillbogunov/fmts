@@ -9,6 +9,7 @@ from app.services.notifications import notify_user, notify_role
 
 settings=get_settings()
 OPEN={'new','assigned','in_progress','waiting'}
+SLA_RUNNING={'new','assigned','in_progress'}
 
 def _safe_json(value:str, default):
     try: return json.loads(value or '')
@@ -63,7 +64,7 @@ def apply_ticket_rules(db:Session,ticket:Ticket)->list[str]:
 
 def process_sla_escalations(db:Session)->int:
     now=datetime.utcnow(); warn_at=now+timedelta(minutes=max(1,settings.sla_warning_minutes)); created=0
-    rows=db.query(Ticket).filter(Ticket.status.in_(OPEN),Ticket.sla_due_at.is_not(None),Ticket.sla_due_at<=warn_at).all()
+    rows=db.query(Ticket).filter(Ticket.status.in_(SLA_RUNNING),Ticket.sla_due_at.is_not(None),Ticket.sla_due_at<=warn_at).all()
     for t in rows:
         kind='overdue' if t.sla_due_at and t.sla_due_at<now else 'warning'; key=f'{t.id}:{kind}'
         if db.query(SlaEvent).filter(SlaEvent.event_key==key).first(): continue

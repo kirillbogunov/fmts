@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Конфликт изменений — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="conflict-page">
+  <section class="panel conflict-card">
+    <div class="conflict-icon">↻</div>
+    <div class="eyebrow">ЗАЩИТА ОТ ПЕРЕЗАПИСИ</div>
+    <h1>Заявка уже была изменена</h1>
+    <p>{{ message }}</p>
+    <div class="conflict-ticket"><b>{{ ticket.number }}</b><span>{{ ticket.title }}</span></div>
+    <div class="conflict-actions"><a class="btn primary" href="/tickets/{{ticket.id}}#ticket-control">Обновить и открыть заявку</a><a class="btn" href="/tickets">К списку заявок</a></div>
+    <small>FMTS специально остановил сохранение, чтобы изменения одного диспетчера не затёрли изменения другого.</small>
+  </section>
+</div>
+{% endblock %}

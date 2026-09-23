@@ -7,6 +7,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from app.models import Ticket, TicketWorkSession, User
+from app.services.ticket_lifecycle import transition_ticket
 
 CLOSED_STATUSES = {"resolved", "closed", "cancelled"}
 TIME_ROLES = {"technician"}
@@ -117,8 +118,9 @@ def start_work(db: Session, ticket: Ticket, user: User, note: str = "") -> Ticke
     # Один человек не может одновременно учитывать время по нескольким заявкам.
     close_active_for_user(db, user.id, now)
     if ticket.status in {"new", "assigned", "waiting"}:
-        ticket.status = "in_progress"
-    ticket.updated_at = now
+        transition_ticket(db, ticket, "in_progress", user_id=user.id, source="timer", changed_at=now)
+    else:
+        ticket.updated_at = now
     entry = TicketWorkSession(
         ticket_id=ticket.id,
         user_id=user.id,

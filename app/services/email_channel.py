@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.models import Site, Ticket, User, TicketComment
 from app.services.maintenance import next_ticket_number
 from app.services.automation import apply_ticket_rules
+from app.services.ticket_lifecycle import ensure_initial_history
 settings=get_settings()
 
 def _decode(value:str)->str:
@@ -46,9 +47,9 @@ def poll_mailbox(db:Session)->int:
             if existing:
                 db.add(TicketComment(ticket_id=existing.id,user_id=u.id if u else None,body=(body or f'E-mail от {sender_email}')[:12000])); created+=1; continue
             t=Ticket(number=next_ticket_number(db),title=subject[:220],description=body,category='Другое',priority='normal',status='new',site_id=site.id,
-                     requester_id=u.id if u else None,requester_name=(u.full_name if u else sender_name or sender_email or 'E-mail'),requester_phone='',room='',
+                     requester_id=u.id if u else None,creator_id=u.id if u else None,requester_name=(u.full_name if u else sender_name or sender_email or 'E-mail'),requester_phone='',room='',
                      sla_due_at=datetime.utcnow()+timedelta(hours=24))
-            db.add(t); db.flush(); apply_ticket_rules(db,t); created+=1
+            db.add(t); db.flush(); apply_ticket_rules(db,t); ensure_initial_history(db,t,user_id=(u.id if u else None),source="email"); created+=1
         db.commit(); return created
     except Exception as exc:
         db.rollback(); print('imap poll error:',exc); return 0

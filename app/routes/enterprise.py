@@ -209,7 +209,7 @@ def report_builder(request:Request,group_by:str='site',days:int=30,db:Session=De
         elif group_by=='equipment_category': key=t.equipment.category if t.equipment else 'Без оборудования'
         else: key=t.site.name if t.site else '—'
         x=agg.setdefault(key,{'name':key,'count':0,'closed':0,'overdue':0,'labor':0.0,'parts':0.0,'hours':0.0})
-        x['count']+=1; x['closed']+=int(t.status in {'resolved','closed'}); x['overdue']+=int(bool(t.sla_due_at and t.sla_due_at<datetime.utcnow() and t.status not in {'resolved','closed','cancelled'}))
+        x['count']+=1; x['closed']+=int(t.status in {'resolved','closed'}); x['overdue']+=int(bool(t.sla_due_at and t.sla_due_at<datetime.utcnow() and t.status not in {'resolved','closed','cancelled','waiting'}))
         if has_permission(u,'ticket.cost'): x['labor']+=float(t.labor_cost or 0);x['parts']+=float(t.parts_cost or 0)
         x['hours']+=sum(float(ws.duration_seconds or 0) for ws in t.work_sessions)/3600
     data=sorted(agg.values(),key=lambda x:(-x['count'],x['name']))

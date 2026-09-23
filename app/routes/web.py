@@ -13,7 +13,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.one_c import OneCClient
@@ -31,6 +31,7 @@ from app.services.ldap_auth import authenticate_ldap
 from app.services.automation import apply_ticket_rules
 from app.services.notifications import notify_user
 from app.services.operations import pick_group_assignee, sync_group_observers
+from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket, effective_sla_due, status_timeline
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -205,7 +206,7 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
     total_count=tq.count()
     done_count=tq.filter(Ticket.status.in_(["resolved","closed"])).count()
     open_count=tq.filter(Ticket.status.in_(open_status)).count()
-    overdue_count=tq.filter(Ticket.status.in_(open_status),Ticket.sla_due_at < now).count()
+    overdue_count=tq.filter(Ticket.status.in_(["new","assigned","in_progress"]),Ticket.sla_due_at < now).count()
     dashboard_rings={
         "open_share": round((open_count/total_count)*100) if total_count else 0,
         "done_share": round((done_count/total_count)*100) if total_count else 0,
@@ -387,6 +388,7 @@ async def ticket_create(request:Request,title:str=Form(...),description:str=Form
     db.add(t); db.flush()
     sync_group_observers(db,t)
     apply_ticket_rules(db,t)
+    ensure_initial_history(db,t,user_id=u.id,source="create")
     fields=db.query(CustomField).filter(CustomField.active==True,((CustomField.service_id==t.service_id)|(CustomField.service_id.is_(None)))).all()
     for field in fields:
         value=str(form_data.get(f"field_{field.id}","")).strip()
@@ -418,6 +420,9 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.assign") else []
     materials=ticket_material_summary(db,t.id) if has_permission(u,"ticket.materials.view") else {"rows":[],"total":Decimal("0.00"),"count":0}
     total_cost=as_money(t.labor_cost)+as_money(materials["total"])
+    lifecycle=status_timeline(db,t)
+    reminders=db.query(TicketReminder).filter(TicketReminder.ticket_id==t.id,TicketReminder.user_id==u.id,TicketReminder.completed_at.is_(None)).order_by(TicketReminder.remind_at).all()
+    sla_display_due=effective_sla_due(t)
     return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,work_time=work_time,active_session=active_session,
         can_track=can_track_ticket_time(u,t),users=technicians,contractors=db.query(Contractor).order_by(Contractor.name).all() if has_permission(u,"contractor.view") or has_permission(u,"ticket.contractor") else [],
         inventory=db.query(InventoryItem).order_by(InventoryItem.name).all() if has_permission(u,"inventory.view") else [],status_options=status_options,
@@ -433,16 +438,19 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
         knowledge_suggestions=db.query(KnowledgeArticle).filter(KnowledgeArticle.active==True).filter(((KnowledgeArticle.equipment_category==t.equipment.category) if t.equipment else (KnowledgeArticle.equipment_category=="")) | (KnowledgeArticle.service_id==t.service_id)).order_by(KnowledgeArticle.updated_at.desc()).limit(5).all(),
         observers=db.query(TicketObserver).filter(TicketObserver.ticket_id==t.id).order_by(TicketObserver.id).all(),
         participant_users=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.observe") else [],
-        support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else []))
+        support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else [],
+        lifecycle=lifecycle,reminders=reminders,sla_display_due=sla_display_due))
 
 @router.post("/tickets/{ticket_id}/update")
-def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),group_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),db:Session=Depends(get_db)):
+def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),group_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),edit_version:int=Form(1),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if not t: return RedirectResponse("/tickets",303)
     if not can_view_ticket(u,t,db):
         return forbidden(request,db,u,"ticket.view")
+    if int(edit_version or 0) != int(t.edit_version or 1):
+        return templates.TemplateResponse("edit_conflict.html",ctx(request,db,ticket=t,message="Заявка была изменена другим пользователем после открытия этой страницы. Ваши данные не перезаписаны."),status_code=409)
 
     old_status=t.status
     old_assignee_id=t.assignee_id
@@ -519,12 +527,15 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
             if tracked < 60:
                 return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.workflow",message="Перед выполнением заявки необходимо зафиксировать фактическое время работ (не менее 1 минуты)"),status_code=400)
 
-    t.status=effective_status
-    t.updated_at=datetime.utcnow()
+    now=datetime.utcnow()
+    status_changed=transition_ticket(db,t,effective_status,user_id=u.id,source="web",changed_at=now)
+    if not status_changed:
+        t.updated_at=now
+        t.edit_version=int(t.edit_version or 1)+1
     if effective_status in ("resolved","closed") and not t.resolved_at:
-        t.resolved_at=datetime.utcnow(); close_active_for_ticket(db,t.id,t.resolved_at)
+        t.resolved_at=now; close_active_for_ticket(db,t.id,t.resolved_at)
     elif effective_status == "cancelled":
-        close_active_for_ticket(db,t.id,datetime.utcnow())
+        close_active_for_ticket(db,t.id,now)
     elif effective_status not in ("resolved","closed") and t.resolved_at:
         t.resolved_at=None
     db.commit(); db.refresh(t)
@@ -534,6 +545,32 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
     audit(db,request,u,"ticket.update",entity_type="ticket",entity_id=t.id,details=f"status {old_status}->{t.status}; assignee {old_assignee_id}->{t.assignee_id}; group {old_group_id}->{t.group_id}")
     push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
+
+@router.post("/tickets/{ticket_id}/reminders")
+def ticket_reminder_create(ticket_id:int,request:Request,remind_at:str=Form(...),note:str=Form(""),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    t=db.get(Ticket,ticket_id)
+    if not t or not can_view_ticket(u,t,db): return forbidden(request,db,u,"ticket.view")
+    try:
+        when=datetime.fromisoformat(remind_at)
+    except Exception:
+        return RedirectResponse(f"/tickets/{ticket_id}#ticket-reminders",303)
+    if when <= datetime.utcnow():
+        when=datetime.utcnow()+timedelta(minutes=1)
+    db.add(TicketReminder(ticket_id=t.id,user_id=u.id,remind_at=when,note=(note or "").strip()[:500]))
+    db.commit()
+    audit(db,request,u,"ticket.reminder.create",entity_type="ticket",entity_id=t.id,details=f"remind_at={when.isoformat()}")
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-reminders",303)
+
+@router.post("/tickets/{ticket_id}/reminders/{reminder_id}/complete")
+def ticket_reminder_complete(ticket_id:int,reminder_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    row=db.get(TicketReminder,reminder_id)
+    if not row or row.ticket_id!=ticket_id or row.user_id!=u.id: return forbidden(request,db,u,"ticket.reminder")
+    row.completed_at=datetime.utcnow(); db.commit()
+    return RedirectResponse(f"/tickets/{ticket_id}#ticket-reminders",303)
 
 @router.post("/tickets/{ticket_id}/time/start")
 def ticket_time_start(ticket_id:int,request:Request,note:str=Form(""),db:Session=Depends(get_db)):

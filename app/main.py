@@ -21,6 +21,7 @@ from app.access import has_permission
 from app.services.automation import process_sla_escalations
 from app.services.email_channel import poll_mailbox
 from app.services.report_subscriptions import process_report_subscriptions
+from app.services.reminders import process_ticket_reminders
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -46,6 +47,7 @@ async def enterprise_loop():
             process_sla_escalations(db)
             poll_mailbox(db)
             process_report_subscriptions(db)
+            process_ticket_reminders(db)
         except Exception as exc:
             print("enterprise background error:", exc)
             db.rollback()

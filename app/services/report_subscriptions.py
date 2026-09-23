@@ -22,7 +22,7 @@ def process_report_subscriptions(db:Session)->int:
         if user.role=='technician': q=q.filter(Ticket.assignee_id==user.id)
         elif user.role=='requester': q=q.filter(Ticket.requester_id==user.id)
         open_count=q.filter(Ticket.status.in_(OPEN)).count()
-        overdue=q.filter(Ticket.status.in_(OPEN),Ticket.sla_due_at<now).count()
+        overdue=q.filter(Ticket.status.in_({'new','assigned','in_progress'}),Ticket.sla_due_at<now).count()
         total=q.count()
         cfg={}
         try: cfg=json.loads(sub.config_json or '{}')

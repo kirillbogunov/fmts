@@ -10,6 +10,7 @@ from app.services.one_c import (
 )
 from app.services.maintenance import next_ticket_number
 from app.services.ui_styles import sla_hours_for
+from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket
 
 
 def ticket_to_1c_payload(t: Ticket) -> dict:
@@ -107,7 +108,14 @@ def upsert_ticket_from_1c(db: Session, row: dict) -> Ticket:
     t.description = description
     t.category = str(pick(row, "category", "Категория", default=t.category or "Другое") or "Другое")
     t.priority = priority_from_1c(pick(row, "priority", "Приоритет", default="Обычный"))
-    t.status = status_from_1c(pick(row, "status", "Статус", default="Новая"))
+    incoming_status = status_from_1c(pick(row, "status", "Статус", default="Новая"))
+    status_changed = (not created and incoming_status != t.status)
+    if created:
+        t.status = incoming_status
+    elif status_changed:
+        transition_ticket(db,t,incoming_status,source="1c")
+    else:
+        t.edit_version = int(t.edit_version or 1) + 1
     t.requester_name = str(pick(row, "requester", "Заявитель", default=t.requester_name or "") or "")
     t.requester_phone = str(pick(row, "phone", "Телефон", default=t.requester_phone or "") or "")
     t.room = str(pick(row, "room", "Кабинет", default=t.room or "") or "")
@@ -133,6 +141,8 @@ def upsert_ticket_from_1c(db: Session, row: dict) -> Ticket:
     if not t.sla_due_at:
         hours = sla_hours_for(db, t.priority)
         t.sla_due_at = t.created_at + timedelta(hours=hours)
+    if created:
+        ensure_initial_history(db,t,source="1c")
     t.onec_sync_error = ""
     t.onec_synced_at = datetime.utcnow()
     db.commit(); db.refresh(t)

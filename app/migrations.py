@@ -131,3 +131,37 @@ _original_run_lightweight_migrations_v065 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v065(engine)
     _run_v070_phase1(engine)
+
+# v0.7.1: ticket lifecycle, SLA pause and optimistic edit version.
+def _run_v071_lifecycle(engine: Engine) -> None:
+    ticket_cols = _columns(engine, "tickets")
+    if not ticket_cols:
+        return
+    dt_type = "DATETIME NULL" if engine.dialect.name == "sqlite" else "TIMESTAMP NULL"
+    additions = {
+        "sla_paused_at": dt_type,
+        "sla_paused_seconds": "INTEGER DEFAULT 0",
+        "edit_version": "INTEGER DEFAULT 1",
+    }
+    with engine.begin() as conn:
+        for name, ddl in additions.items():
+            if name not in ticket_cols:
+                conn.execute(text(f"ALTER TABLE tickets ADD COLUMN {name} {ddl}"))
+        conn.execute(text("UPDATE tickets SET sla_paused_seconds=0 WHERE sla_paused_seconds IS NULL"))
+        conn.execute(text("UPDATE tickets SET edit_version=1 WHERE edit_version IS NULL OR edit_version < 1"))
+        # Existing waiting tickets begin their SLA pause at the last known update.
+        conn.execute(text("UPDATE tickets SET sla_paused_at=COALESCE(updated_at, created_at, CURRENT_TIMESTAMP) WHERE status='waiting' AND sla_paused_at IS NULL AND sla_due_at IS NOT NULL"))
+        # History tables are already created by Base.metadata.create_all. Backfill one
+        # marker per old ticket so future durations are correct without inventing past transitions.
+        conn.execute(text("""
+            INSERT INTO ticket_status_history (ticket_id, from_status, to_status, changed_by_id, changed_at, previous_duration_seconds, source)
+            SELECT t.id, '', t.status, NULL, COALESCE(t.updated_at, t.created_at), 0, 'backfill'
+              FROM tickets t
+             WHERE NOT EXISTS (SELECT 1 FROM ticket_status_history h WHERE h.ticket_id=t.id)
+        """))
+
+_original_run_lightweight_migrations_v070 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v070(engine)
+    _run_v071_lifecycle(engine)

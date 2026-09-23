@@ -19,6 +19,7 @@ from app.services.maintenance import next_ticket_number
 from app.services.notifications import notify_user
 from app.services.operations import pick_group_assignee, sync_group_observers
 from app.services.ui_styles import sla_hours_for
+from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket
 
 router = APIRouter()
 
@@ -155,7 +156,8 @@ def ticket_bulk(
             target = db.get(User, int(assignee_id))
             if target and target.active and target.role == 'technician':
                 t.assignee_id = target.id; t.master_name = target.full_name
-                if t.status == 'new': t.status = 'assigned'
+                if t.status == 'new': transition_ticket(db,t,'assigned',user_id=u.id,source='bulk')
+                else: t.edit_version=int(t.edit_version or 1)+1
                 changed += 1
         elif action == 'group' and group_id:
             group = db.get(SupportGroup, int(group_id))
@@ -165,10 +167,11 @@ def ticket_bulk(
                     picked = pick_group_assignee(db, group.id)
                     if picked:
                         t.assignee_id = picked.id; t.master_name = picked.full_name
-                if t.status == 'new': t.status = 'assigned'
+                if t.status == 'new': transition_ticket(db,t,'assigned',user_id=u.id,source='bulk')
+                else: t.edit_version=int(t.edit_version or 1)+1
                 sync_group_observers(db, t); changed += 1
         elif action == 'priority' and priority in {'low', 'normal', 'high', 'critical'}:
-            t.priority = priority; changed += 1
+            t.priority = priority; t.edit_version=int(t.edit_version or 1)+1; changed += 1
         elif action == 'status' and status:
             decision = can_change_ticket_status(u, t, status)
             if decision.allowed:
@@ -178,7 +181,7 @@ def ticket_bulk(
                     continue
                 if status in {'assigned', 'in_progress', 'waiting'} and not (t.assignee_id or t.group_id or t.contractor_id):
                     continue
-                t.status = status; changed += 1
+                transition_ticket(db,t,status,user_id=u.id,source='bulk'); changed += 1
         elif action == 'duplicate':
             copy = Ticket(
                 number=next_ticket_number(db), title=f'{t.title} — копия', description=t.description,
@@ -188,7 +191,7 @@ def ticket_bulk(
                 service_id=t.service_id, group_id=t.group_id, template_id=t.template_id,
                 sla_due_at=datetime.utcnow() + timedelta(hours=sla_hours_for(db, t.priority)),
             )
-            db.add(copy); db.flush()
+            db.add(copy); db.flush(); ensure_initial_history(db,copy,user_id=u.id,source='duplicate')
             db.add(TicketLink(ticket_id=t.id, linked_ticket_id=copy.id, link_type='duplicate', created_by_id=u.id))
             db.add(TicketLink(ticket_id=copy.id, linked_ticket_id=t.id, link_type='duplicate', created_by_id=u.id))
             sync_group_observers(db, copy); changed += 1
@@ -284,7 +287,7 @@ def ticket_template_instantiate(
         master_name=assignee.full_name if assignee else '', group_id=group_id, service_id=tpl.service_id, template_id=tpl.id,
         sla_due_at=datetime.utcnow() + timedelta(hours=sla),
     )
-    db.add(root); db.flush(); sync_group_observers(db, root)
+    db.add(root); db.flush(); ensure_initial_history(db,root,user_id=u.id,source='template'); sync_group_observers(db, root)
     for task in db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == tpl.id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id).all():
         child_assignee = pick_group_assignee(db, group_id) if group_id else None
         child = Ticket(
@@ -295,7 +298,7 @@ def ticket_template_instantiate(
             master_name=child_assignee.full_name if child_assignee else '', group_id=group_id, service_id=tpl.service_id, template_id=tpl.id,
             sla_due_at=datetime.utcnow() + timedelta(hours=sla),
         )
-        db.add(child); db.flush(); sync_group_observers(db, child)
+        db.add(child); db.flush(); ensure_initial_history(db,child,user_id=u.id,source='template'); sync_group_observers(db, child)
         db.add(TicketLink(ticket_id=root.id, linked_ticket_id=child.id, link_type='child', created_by_id=u.id))
         db.add(TicketLink(ticket_id=child.id, linked_ticket_id=root.id, link_type='parent', created_by_id=u.id))
     db.commit()
