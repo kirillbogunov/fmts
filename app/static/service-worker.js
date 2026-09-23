@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v060-enterprise-servicedesk';
+const CACHE = 'fmts-v063-mobile-nav';
 const STATIC = ['/static/app.css','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));

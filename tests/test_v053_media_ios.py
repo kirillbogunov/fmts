@@ -95,3 +95,15 @@ def test_ios_pwa_header_uses_safe_area_and_non_translucent_status_bar():
     assert 'padding-top:calc(56px + env(safe-area-inset-top,0px))' in css
     assert 'height:calc(56px + env(safe-area-inset-top,0px))' in css
     assert 'apple-mobile-web-app-status-bar-style" content="black"' in base
+
+
+def test_mobile_drawer_fills_viewport_and_keeps_navigation_scrollable():
+    root=Path(__file__).resolve().parents[1]
+    css=(root/'app/static/app.css').read_text(encoding='utf-8')
+    base=(root/'app/templates/base.html').read_text(encoding='utf-8')
+    assert 'height:100dvh!important' in css
+    assert '.sidebar-nav{flex:1;min-height:0;overflow-y:auto' in css
+    assert '.sidebar-bottom{flex:0 0 auto' in css
+    assert 'body.menu-open .mobile-overlay{opacity:1!important' in css
+    assert 'class="sidebar-close"' in base
+    assert 'window.setMobileMenu = function(open)' in base
