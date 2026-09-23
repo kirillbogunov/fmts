@@ -228,9 +228,9 @@ def report_subscription_new(request:Request,name:str=Form(...),group_by:str=Form
 def ticket_link_add(ticket_id:int,request:Request,linked_ticket_no:str=Form(...),link_type:str=Form('related'),db:Session=Depends(get_db)):
     u=user_or_login(request,db); t=db.get(Ticket,ticket_id)
     if not u:return RedirectResponse('/login',303)
-    if not t or not can_view_ticket(u,t) or not has_permission(u,'ticket.link'):return forbidden(request,db,u,'ticket.link')
+    if not t or not can_view_ticket(u,t,db) or not has_permission(u,'ticket.link'):return forbidden(request,db,u,'ticket.link')
     other=db.query(Ticket).filter(Ticket.number==linked_ticket_no.strip()).first()
-    if not other or not can_view_ticket(u,other) or other.id==t.id:return RedirectResponse(f'/tickets/{t.id}',303)
+    if not other or not can_view_ticket(u,other,db) or other.id==t.id:return RedirectResponse(f'/tickets/{t.id}',303)
     exists=db.query(TicketLink).filter(TicketLink.ticket_id==t.id,TicketLink.linked_ticket_id==other.id).first()
     if not exists:db.add(TicketLink(ticket_id=t.id,linked_ticket_id=other.id,link_type=link_type,created_by_id=u.id));db.commit()
     return RedirectResponse(f'/tickets/{t.id}#enterprise-ticket',303)
@@ -239,7 +239,7 @@ def ticket_link_add(ticket_id:int,request:Request,linked_ticket_no:str=Form(...)
 async def ticket_custom_fields(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     u=user_or_login(request,db);t=db.get(Ticket,ticket_id)
     if not u:return RedirectResponse('/login',303)
-    if not t or not can_view_ticket(u,t):return forbidden(request,db,u,'ticket.view')
+    if not t or not can_view_ticket(u,t,db):return forbidden(request,db,u,'ticket.view')
     if u.role=='requester' and t.requester_id!=u.id:return forbidden(request,db,u,'ticket.view')
     form=await request.form()
     fields=db.query(CustomField).filter(CustomField.active==True,((CustomField.service_id==t.service_id)|(CustomField.service_id.is_(None)))).all()
@@ -256,7 +256,7 @@ async def ticket_custom_fields(ticket_id:int,request:Request,db:Session=Depends(
 def approval_new(ticket_id:int,request:Request,approver_id:str=Form(''),comment:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db);t=db.get(Ticket,ticket_id)
     if not u:return RedirectResponse('/login',303)
-    if not t or not can_view_ticket(u,t) or not has_permission(u,'approval.request'):return forbidden(request,db,u,'approval.request')
+    if not t or not can_view_ticket(u,t,db) or not has_permission(u,'approval.request'):return forbidden(request,db,u,'approval.request')
     approver=db.get(User,int(approver_id)) if approver_id else db.query(User).filter(User.active==True,User.role.in_(['manager','admin'])).order_by(User.role).first()
     if not approver:return RedirectResponse(f'/tickets/{t.id}',303)
     row=ApprovalRequest(ticket_id=t.id,requested_by_id=u.id,approver_id=approver.id,comment=comment);db.add(row);db.flush()
@@ -277,7 +277,7 @@ def approval_decide(approval_id:int,request:Request,decision:str=Form(...),comme
 def ticket_feedback(ticket_id:int,request:Request,rating:int=Form(...),comment:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db);t=db.get(Ticket,ticket_id)
     if not u:return RedirectResponse('/login',303)
-    if not t or not can_view_ticket(u,t) or not has_permission(u,'feedback.create'):return forbidden(request,db,u,'feedback.create')
+    if not t or not can_view_ticket(u,t,db) or not has_permission(u,'feedback.create'):return forbidden(request,db,u,'feedback.create')
     if t.status not in {'resolved','closed'}:return RedirectResponse(f'/tickets/{t.id}',303)
     rating=max(1,min(5,rating)); row=db.query(TicketFeedback).filter(TicketFeedback.ticket_id==t.id,TicketFeedback.user_id==u.id).first()
     if not row: row=TicketFeedback(ticket_id=t.id,user_id=u.id);db.add(row)

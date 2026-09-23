@@ -13,7 +13,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.one_c import OneCClient
@@ -30,6 +30,7 @@ from app.services.audit import audit
 from app.services.ldap_auth import authenticate_ldap
 from app.services.automation import apply_ticket_rules
 from app.services.notifications import notify_user
+from app.services.operations import pick_group_assignee, sync_group_observers
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -202,7 +203,7 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
     recent=tq.order_by(Ticket.id.desc()).limit(8).all()
     by_status=tq.with_entities(Ticket.status,func.count(Ticket.id)).group_by(Ticket.status).all()
     total_count=tq.count()
-    done_count=tq.filter(Ticket.status=="done").count()
+    done_count=tq.filter(Ticket.status.in_(["resolved","closed"])).count()
     open_count=tq.filter(Ticket.status.in_(open_status)).count()
     overdue_count=tq.filter(Ticket.status.in_(open_status),Ticket.sla_due_at < now).count()
     dashboard_rings={
@@ -242,6 +243,7 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
         "low_stock":low_stock,
         "recent":recent,
         "by_status":by_status,
+        "status_chart_data":[[status,int(count)] for status,count in by_status],
         "total_count":total_count,
         "done_count":done_count,
         "dashboard_rings":dashboard_rings,
@@ -323,7 +325,7 @@ def tickets(request:Request,status:str="",q:str="",priority:str="",site_id:str="
     if q: query=query.filter((Ticket.title.contains(q)) | (Ticket.number.contains(q)) | (Ticket.description.contains(q)) | (Ticket.requester_name.contains(q)))
     rows=query.order_by(Ticket.id.desc()).all()
     time_totals=ticket_time_totals(db,[x.id for x in rows])
-    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all()))
+    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all(),support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.bulk") else []))
 
 @router.get("/tickets/new", response_class=HTMLResponse)
 def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get_db)):
@@ -332,10 +334,12 @@ def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get
     if not has_permission(u,"ticket.create"):
         return forbidden(request,db,u,"ticket.create")
     technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.assign") else []
-    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,selected_equipment_id=equipment_id,categories=options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]]),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
+    requesters=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.set_requester") else [u]
+    groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else []
+    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,requesters=requesters,groups=groups,selected_equipment_id=equipment_id,categories=options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]]),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
 
 @router.post("/tickets/new")
-async def ticket_create(request:Request,title:str=Form(...),description:str=Form(""),category:str=Form("Другое"),priority:str=Form("normal"),service_id:str=Form(""),site_id:int=Form(...),equipment_id:str=Form(""),assignee_id:str=Form(""),room:str=Form(""),phone:str=Form(""),attachment:UploadFile|None=File(None),db:Session=Depends(get_db)):
+async def ticket_create(request:Request,title:str=Form(...),description:str=Form(""),category:str=Form("Другое"),priority:str=Form("normal"),service_id:str=Form(""),site_id:int=Form(...),equipment_id:str=Form(""),requester_id:str=Form(""),assignee_id:str=Form(""),group_id:str=Form(""),room:str=Form(""),phone:str=Form(""),attachment:UploadFile|None=File(None),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"ticket.create"):
@@ -358,18 +362,30 @@ async def ticket_create(request:Request,title:str=Form(...),description:str=Form
             return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.create",message="Оборудование не относится к выбранному объекту"),status_code=400)
     # Заявитель/техник не могут самовольно повышать приоритет или назначать исполнителя.
     effective_priority=(service.default_priority if service and service.default_priority else (priority if has_permission(u,"ticket.set_priority") else "normal"))
+    requester=u
+    if requester_id and has_permission(u,"ticket.set_requester"):
+        candidate=db.get(User,int(requester_id))
+        if candidate and candidate.active: requester=candidate
+    new_group_id=None
+    if group_id and has_permission(u,"ticket.assign"):
+        group=db.get(SupportGroup,int(group_id))
+        if group and group.active: new_group_id=group.id
     new_assignee_id=None
     if assignee_id and has_permission(u,"ticket.assign"):
         target=db.get(User,int(assignee_id))
         if target and target.active and target.role=="technician":
             new_assignee_id=target.id
+    if new_group_id and not new_assignee_id:
+        picked=pick_group_assignee(db,new_group_id)
+        if picked: new_assignee_id=picked.id
     sla_hours=sla_hours_for(db,effective_priority)
-    t=Ticket(number=next_ticket_number(db),title=title,description=description,category=category,priority=effective_priority,status="assigned" if new_assignee_id else "new",site_id=site_id,
-             equipment_id=eq_id,requester_id=u.id,requester_name=u.full_name,requester_phone=phone,room=room,
-             assignee_id=new_assignee_id,master_name="",service_id=(service.id if service else None),sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
+    t=Ticket(number=next_ticket_number(db),title=title,description=description,category=category,priority=effective_priority,status="assigned" if (new_assignee_id or new_group_id) else "new",site_id=site_id,
+             equipment_id=eq_id,requester_id=requester.id,creator_id=u.id,requester_name=requester.full_name,requester_phone=(phone or requester.phone or ""),room=room,
+             assignee_id=new_assignee_id,group_id=new_group_id,master_name="",service_id=(service.id if service else None),sla_due_at=datetime.utcnow()+timedelta(hours=(service.default_sla_hours if service and service.default_sla_hours else sla_hours)))
     if new_assignee_id:
         assigned=db.get(User,new_assignee_id); t.master_name=assigned.full_name if assigned else ""
     db.add(t); db.flush()
+    sync_group_observers(db,t)
     apply_ticket_rules(db,t)
     fields=db.query(CustomField).filter(CustomField.active==True,((CustomField.service_id==t.service_id)|(CustomField.service_id.is_(None)))).all()
     for field in fields:
@@ -393,7 +409,7 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if not t: return RedirectResponse("/tickets",303)
-    if not can_view_ticket(u,t):
+    if not can_view_ticket(u,t,db):
         return forbidden(request,db,u,"ticket.view", "Эта заявка не входит в область доступа вашей роли")
     work_time=ticket_time_summary(db,t.id)
     active_session=next((x for x in work_time["active"] if x.user_id==u.id),None)
@@ -414,28 +430,33 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
         approvals=db.query(ApprovalRequest).filter(ApprovalRequest.ticket_id==t.id).order_by(ApprovalRequest.id.desc()).all(),
         feedback_rows=db.query(TicketFeedback).filter(TicketFeedback.ticket_id==t.id).order_by(TicketFeedback.id.desc()).all(),
         approvers=db.query(User).filter(User.active==True,User.role.in_(["manager","admin"])).order_by(User.full_name).all(),
-        knowledge_suggestions=db.query(KnowledgeArticle).filter(KnowledgeArticle.active==True).filter(((KnowledgeArticle.equipment_category==t.equipment.category) if t.equipment else (KnowledgeArticle.equipment_category=="")) | (KnowledgeArticle.service_id==t.service_id)).order_by(KnowledgeArticle.updated_at.desc()).limit(5).all()))
+        knowledge_suggestions=db.query(KnowledgeArticle).filter(KnowledgeArticle.active==True).filter(((KnowledgeArticle.equipment_category==t.equipment.category) if t.equipment else (KnowledgeArticle.equipment_category=="")) | (KnowledgeArticle.service_id==t.service_id)).order_by(KnowledgeArticle.updated_at.desc()).limit(5).all(),
+        observers=db.query(TicketObserver).filter(TicketObserver.ticket_id==t.id).order_by(TicketObserver.id).all(),
+        participant_users=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.observe") else [],
+        support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else []))
 
 @router.post("/tickets/{ticket_id}/update")
-def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),db:Session=Depends(get_db)):
+def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),group_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
     if not t: return RedirectResponse("/tickets",303)
-    if not can_view_ticket(u,t):
+    if not can_view_ticket(u,t,db):
         return forbidden(request,db,u,"ticket.view")
 
     old_status=t.status
     old_assignee_id=t.assignee_id
+    old_group_id=t.group_id
     requested_assignee=int(assignee_id) if assignee_id else None
+    requested_group=int(group_id) if group_id else None
     requested_contractor=int(contractor_id) if contractor_id else None
 
     # Assignment itself drives the NEW -> ASSIGNED transition. This prevents
     # contradictory states such as "Новая" with an assigned technician.
     effective_status=status
-    if requested_assignee is not None and old_status=="new" and status=="new":
+    if (requested_assignee is not None or requested_group is not None) and old_status=="new" and status=="new":
         effective_status="assigned"
-    if requested_assignee is None and requested_contractor is None and old_status=="assigned" and status=="assigned":
+    if requested_assignee is None and requested_group is None and requested_contractor is None and old_status=="assigned" and status=="assigned":
         effective_status="new"
 
     decision=can_change_ticket_status(u,t,effective_status)
@@ -452,6 +473,20 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
         close_active_for_ticket(db,t.id,datetime.utcnow())
         t.assignee_id=requested_assignee
         t.master_name=db.get(User,requested_assignee).full_name if requested_assignee else ""
+
+    if requested_group != old_group_id:
+        if not has_permission(u,"ticket.assign"):
+            return forbidden(request,db,u,"ticket.assign","Назначение группы доступно только диспетчеру, руководителю или администратору")
+        if requested_group is not None:
+            group=db.get(SupportGroup,requested_group)
+            if not group or not group.active:
+                return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.assign",message="Выбранная группа недоступна"),status_code=400)
+        t.group_id=requested_group
+        if requested_group and not t.assignee_id:
+            picked=pick_group_assignee(db,requested_group)
+            if picked:
+                t.assignee_id=picked.id; t.master_name=picked.full_name
+        sync_group_observers(db,t)
 
     if requested_contractor != t.contractor_id:
         if not has_permission(u,"ticket.contractor"):
@@ -474,7 +509,7 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
 
     # Hard workflow invariants: work states require an executor, completion
     # requires a repair note and recorded time for internally assigned work.
-    if effective_status in {"assigned","in_progress","waiting","resolved","closed"} and t.assignee_id is None and t.contractor_id is None:
+    if effective_status in {"assigned","in_progress","waiting","resolved","closed"} and t.assignee_id is None and t.group_id is None and t.contractor_id is None:
         return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.workflow",message="Для этого статуса сначала назначьте техника или подрядчика"),status_code=400)
     if effective_status in {"resolved","closed"}:
         if not (t.master_comment or "").strip():
@@ -496,7 +531,7 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
     if t.assignee_id and t.assignee_id!=old_assignee_id:
         notify_user(db,db.get(User,t.assignee_id),f"Назначена заявка {t.number}",t.title,f"/tickets/{t.id}",dedup_key=f"assigned:{t.id}:{t.assignee_id}")
         db.commit()
-    audit(db,request,u,"ticket.update",entity_type="ticket",entity_id=t.id,details=f"status {old_status}->{t.status}; assignee {old_assignee_id}->{t.assignee_id}")
+    audit(db,request,u,"ticket.update",entity_type="ticket",entity_id=t.id,details=f"status {old_status}->{t.status}; assignee {old_assignee_id}->{t.assignee_id}; group {old_group_id}->{t.group_id}")
     push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
 
@@ -505,7 +540,7 @@ def ticket_time_start(ticket_id:int,request:Request,note:str=Form(""),db:Session
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
-    if not t or not can_view_ticket(u,t): return forbidden(request,db,u,"ticket.time.track")
+    if not t or not can_view_ticket(u,t,db): return forbidden(request,db,u,"ticket.time.track")
     if not can_track_ticket_time(u,t):
         return forbidden(request,db,u,"ticket.time.track","Таймер может запускать только назначенный на заявку техник")
     try:
@@ -520,7 +555,7 @@ def ticket_time_stop(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
-    if not t or not can_view_ticket(u,t): return forbidden(request,db,u,"ticket.time.track")
+    if not t or not can_view_ticket(u,t,db): return forbidden(request,db,u,"ticket.time.track")
     if u.role!="technician" or t.assignee_id!=u.id:
         return forbidden(request,db,u,"ticket.time.track","Остановить таймер может только назначенный техник")
     entry=stop_work(db,t,u)
@@ -532,7 +567,7 @@ def ticket_time_manual(ticket_id:int,request:Request,minutes:int=Form(...),work_
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
-    if not t or not can_view_ticket(u,t) or not has_permission(u,"ticket.time.manual_self") or u.role!="technician" or t.assignee_id!=u.id:
+    if not t or not can_view_ticket(u,t,db) or not has_permission(u,"ticket.time.manual_self") or u.role!="technician" or t.assignee_id!=u.id:
         return forbidden(request,db,u,"ticket.time.manual_self","Вручную добавить своё время может только назначенный техник")
     if t.status in ("resolved","closed","cancelled"):
         return forbidden(request,db,u,"ticket.time.manual_self","Для закрытой или отменённой заявки добавление времени запрещено")
@@ -563,7 +598,7 @@ def ticket_comment(ticket_id:int,request:Request,body:str=Form(""),photos:list[U
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     t=db.get(Ticket,ticket_id)
-    if not can_comment_ticket(u,t):
+    if not can_comment_ticket(u,t,db):
         return forbidden(request,db,u,"ticket.comment")
     uploads=[x for x in (photos or []) if x and x.filename]
     if len(uploads)>settings.comment_photo_max_count:
@@ -597,8 +632,13 @@ def ticket_comment(ticket_id:int,request:Request,body:str=Form(""),photos:list[U
     recipients=[]
     if t.assignee_id and t.assignee_id!=u.id: recipients.append(db.get(User,t.assignee_id))
     if t.requester_id and t.requester_id!=u.id: recipients.append(db.get(User,t.requester_id))
+    for obs in db.query(TicketObserver).filter(TicketObserver.ticket_id==t.id).all():
+        if obs.user_id!=u.id: recipients.append(db.get(User,obs.user_id))
+    seen=set()
     for recipient in recipients:
-        notify_user(db,recipient,f"Новый комментарий в {t.number}",(text[:180] or "Прикреплено фото"),f"/tickets/{t.id}#ticket-comments")
+        if recipient and recipient.id not in seen:
+            seen.add(recipient.id)
+            notify_user(db,recipient,f"Новый комментарий в {t.number}",(text[:180] or "Прикреплено фото"),f"/tickets/{t.id}#ticket-comments")
     db.commit()
     return RedirectResponse(f"/tickets/{ticket_id}#ticket-comments",303)
 
@@ -607,7 +647,7 @@ def ticket_stock(ticket_id:int,request:Request,item_id:int=Form(...),qty:float=F
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     item=db.get(InventoryItem,item_id); t=db.get(Ticket,ticket_id)
-    if not t or not can_issue_stock(u,t):
+    if not t or not can_issue_stock(u,t,db):
         return forbidden(request,db,u,"ticket.stock.issue","Списание материалов доступно назначенному технику или диспетчеру по доступной заявке")
     if not item or qty<=0 or item.qty < qty:
         return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.stock.issue",message="Недостаточный остаток или некорректное количество"),status_code=400)
@@ -635,7 +675,7 @@ def _visible_attachment(attachment_id:int, user:User, db:Session) -> tuple[Attac
     attachment=db.get(Attachment,attachment_id)
     if not attachment: return None,None
     ticket=db.get(Ticket,attachment.ticket_id)
-    if not can_view_ticket(user,ticket): return attachment,None
+    if not can_view_ticket(user,ticket,db): return attachment,None
     return attachment,ticket
 
 @router.get("/attachments/{attachment_id}", response_class=HTMLResponse)
@@ -681,7 +721,7 @@ def protected_upload(stored_name:str,request:Request,db:Session=Depends(get_db))
     attachment=db.query(Attachment).filter(Attachment.stored_name==stored_name).first()
     if not attachment: return Response(status_code=404)
     ticket=db.get(Ticket,attachment.ticket_id)
-    if not can_view_ticket(u,ticket): return forbidden(request,db,u,"ticket.attachment.view")
+    if not can_view_ticket(u,ticket,db): return forbidden(request,db,u,"ticket.attachment.view")
     return RedirectResponse(f"/attachments/{attachment.id}",302)
 
 @router.get("/sites", response_class=HTMLResponse)
@@ -871,7 +911,7 @@ def inventory_detail(item_id:int, request:Request, db:Session=Depends(get_db)):
     # Technicians see write-offs only for tickets assigned to them; operational roles
     # with ticket.list_all see the complete history.
     if not has_permission(u,"ticket.list_all"):
-        movements=[m for m in movements if m.ticket is not None and can_view_ticket(u,m.ticket)]
+        movements=[m for m in movements if m.ticket is not None and can_view_ticket(u,m.ticket,db)]
 
     issue_rows=[]
     issued_qty=0.0

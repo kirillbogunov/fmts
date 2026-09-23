@@ -104,3 +104,30 @@ def run_lightweight_migrations(engine: Engine) -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE tickets ADD COLUMN service_id INTEGER NULL"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_service_id ON tickets (service_id)"))
+
+# v0.7 phase 1: additive ticket ownership/group/template fields.
+def _run_v070_phase1(engine: Engine) -> None:
+    ticket_cols = _columns(engine, "tickets")
+    if not ticket_cols:
+        return
+    additions = {
+        "creator_id": "INTEGER NULL",
+        "group_id": "INTEGER NULL",
+        "template_id": "INTEGER NULL",
+    }
+    with engine.begin() as conn:
+        for name, ddl in additions.items():
+            if name not in ticket_cols:
+                conn.execute(text(f"ALTER TABLE tickets ADD COLUMN {name} {ddl}"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_creator_id ON tickets (creator_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_group_id ON tickets (group_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_template_id ON tickets (template_id)"))
+        # Existing tickets were normally created by their requester, so use that
+        # as the safest historical fallback. New tickets keep creator/requester separate.
+        conn.execute(text("UPDATE tickets SET creator_id=requester_id WHERE creator_id IS NULL AND requester_id IS NOT NULL"))
+
+_original_run_lightweight_migrations_v065 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v065(engine)
+    _run_v070_phase1(engine)

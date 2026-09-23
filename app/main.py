@@ -13,6 +13,7 @@ from app.migrations import run_lightweight_migrations
 from app.routes.web import router as web_router
 from app.routes.api import router as api_router
 from app.routes.enterprise import router as enterprise_router
+from app.routes.operations import router as operations_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
@@ -89,6 +90,7 @@ app.add_middleware(
 app.mount("/static",StaticFiles(directory=str(Path(__file__).resolve().parent/"static")),name="static")
 app.include_router(api_router)
 app.include_router(enterprise_router)
+app.include_router(operations_router)
 app.include_router(web_router)
 
 

@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from fastapi import HTTPException
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Query
 
-from app.models import Ticket, User
+from app.models import Ticket, User, SupportGroupMember, TicketObserver
 
 # Stable role codes used across UI, web routes and REST API.
 ROLE_REQUESTER = "requester"
@@ -46,6 +47,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inventory.view",
         "contractor.view", "contractor.manage",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "report.builder",
+        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
     },
     ROLE_MANAGER: {
         "dashboard.view",
@@ -55,6 +57,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "site.view", "equipment.view", "maintenance.view_all", "inventory.view",
         "contractor.view", "kpi.all", "audit.view",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "approval.decide", "report.builder",
+        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
     },
     ROLE_ADMIN: {
         "*",
@@ -105,39 +108,45 @@ def require_permission(user: User | None, permission: str, detail: str = "Нед
 
 
 def scope_ticket_query(query: Query, user: User) -> Query:
-    """Apply row-level security to tickets for the current role."""
+    """Apply row-level security, including group assignments and observers."""
     if has_permission(user, "ticket.list_all"):
         return query
+    observed = select(TicketObserver.ticket_id).where(TicketObserver.user_id == user.id)
     if user.role == ROLE_REQUESTER:
-        return query.filter(Ticket.requester_id == user.id)
+        return query.filter(or_(Ticket.requester_id == user.id, Ticket.creator_id == user.id, Ticket.id.in_(observed)))
     if user.role == ROLE_TECHNICIAN:
-        return query.filter(Ticket.assignee_id == user.id)
-    # Unknown roles receive no ticket rows by default.
-    return query.filter(Ticket.id == -1)
+        groups = select(SupportGroupMember.group_id).where(SupportGroupMember.user_id == user.id)
+        return query.filter(or_(Ticket.assignee_id == user.id, Ticket.group_id.in_(groups), Ticket.id.in_(observed)))
+    return query.filter(Ticket.id.in_(observed))
 
 
-def can_view_ticket(user: User | None, ticket: Ticket | None) -> bool:
+def can_view_ticket(user: User | None, ticket: Ticket | None, db=None) -> bool:
     if user is None or ticket is None or not user.active:
         return False
     if has_permission(user, "ticket.list_all"):
         return True
-    if user.role == ROLE_REQUESTER:
-        return ticket.requester_id == user.id
-    if user.role == ROLE_TECHNICIAN:
-        return ticket.assignee_id == user.id
+    if user.role == ROLE_REQUESTER and (ticket.requester_id == user.id or ticket.creator_id == user.id):
+        return True
+    if user.role == ROLE_TECHNICIAN and ticket.assignee_id == user.id:
+        return True
+    if db is not None:
+        if ticket.group_id and db.query(SupportGroupMember.id).filter(SupportGroupMember.group_id == ticket.group_id, SupportGroupMember.user_id == user.id).first():
+            return True
+        if db.query(TicketObserver.id).filter(TicketObserver.ticket_id == ticket.id, TicketObserver.user_id == user.id).first():
+            return True
     return False
 
 
-def can_comment_ticket(user: User | None, ticket: Ticket | None) -> bool:
-    return bool(user and has_permission(user, "ticket.comment") and can_view_ticket(user, ticket))
+def can_comment_ticket(user: User | None, ticket: Ticket | None, db=None) -> bool:
+    return bool(user and has_permission(user, "ticket.comment") and can_view_ticket(user, ticket, db))
 
 
-def can_issue_stock(user: User | None, ticket: Ticket | None) -> bool:
+def can_issue_stock(user: User | None, ticket: Ticket | None, db=None) -> bool:
     if not user or not ticket or not has_permission(user, "ticket.stock.issue"):
         return False
     if user.role == ROLE_TECHNICIAN:
         return ticket.assignee_id == user.id and ticket.status not in {"resolved", "closed", "cancelled"}
-    return can_view_ticket(user, ticket)
+    return can_view_ticket(user, ticket, db)
 
 
 def can_track_ticket_time(user: User | None, ticket: Ticket | None) -> bool:
@@ -189,6 +198,8 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "notifications": bool(user and has_permission(user, "notifications.view")),
         "reports": bool(user and has_permission(user, "report.builder")),
         "automation": bool(user and has_permission(user, "automation.manage")),
+        "teams": bool(user and (has_permission(user, "team.manage") or has_permission(user, "ticket.list_all"))),
+        "templates": bool(user and has_permission(user, "ticket.template")),
     }
 
 

@@ -64,6 +64,9 @@ class Ticket(Base):
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     contractor_id: Mapped[int | None] = mapped_column(ForeignKey("contractors.id"), nullable=True)
     service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True, index=True)
+    creator_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("support_groups.id"), nullable=True, index=True)
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("ticket_templates.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -83,7 +86,10 @@ class Ticket(Base):
     site: Mapped[Site] = relationship()
     equipment: Mapped[Equipment | None] = relationship(back_populates="tickets")
     requester: Mapped[User | None] = relationship(foreign_keys=[requester_id])
+    creator: Mapped[User | None] = relationship(foreign_keys=[creator_id])
     assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id])
+    group: Mapped[SupportGroup | None] = relationship(foreign_keys=[group_id])
+    template: Mapped[TicketTemplate | None] = relationship(foreign_keys=[template_id])
     contractor: Mapped[Contractor | None] = relationship()
     comments: Mapped[list[TicketComment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
     attachments: Mapped[list[Attachment]] = relationship(back_populates="ticket", cascade="all, delete-orphan")
@@ -363,3 +369,54 @@ class TechnicianAvailability(Base):
     end_time: Mapped[str] = mapped_column(String(5), default="18:00")
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     user: Mapped[User] = relationship()
+
+
+# ---- ServiceDesk operations extension v0.7 (phase 1) ----
+class SupportGroup(Base):
+    __tablename__ = "support_groups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class SupportGroupMember(Base):
+    __tablename__ = "support_group_members"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("support_groups.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    member_role: Mapped[str] = mapped_column(String(30), default="executor")
+    user: Mapped[User] = relationship()
+    group: Mapped[SupportGroup] = relationship()
+
+class TicketObserver(Base):
+    __tablename__ = "ticket_observers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
+
+class TicketTemplate(Base):
+    __tablename__ = "ticket_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    title_template: Mapped[str] = mapped_column(String(220), default="")
+    description_template: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(100), default="Другое")
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("support_groups.id"), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    service: Mapped[ServiceCatalog | None] = relationship()
+    group: Mapped[SupportGroup | None] = relationship()
+
+class TicketTemplateTask(Base):
+    __tablename__ = "ticket_template_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("ticket_templates.id"), index=True)
+    title: Mapped[str] = mapped_column(String(220))
+    description: Mapped[str] = mapped_column(Text, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    template: Mapped[TicketTemplate] = relationship()

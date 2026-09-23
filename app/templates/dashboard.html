@@ -61,7 +61,7 @@
 window.addEventListener('load', function(){
   if (!window.Chart) return;
   const dailySeries = {{ daily_series | tojson }};
-  const statusPairs = {{ by_status | tojson }};
+  const statusPairs = {{ status_chart_data | tojson }};
   const labels = dailySeries.map(p => p.label);
   const lineValues = dailySeries.map(p => p.count);
   const statusLabels = statusPairs.map(x => x[0]);
