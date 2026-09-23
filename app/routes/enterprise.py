@@ -17,6 +17,8 @@ from app.access import has_permission, can_view_ticket, scope_ticket_query
 from app.routes.web import ctx, templates, forbidden
 from app.services.audit import audit
 from app.services.notifications import notify_user
+from app.services.smart_search import rank_search
+from app.services.categories import category_options
 
 router=APIRouter()
 settings=get_settings()
@@ -115,7 +117,7 @@ def services_page(request:Request,db:Session=Depends(get_db)):
     fields=db.query(CustomField).order_by(CustomField.service_id,CustomField.sort_order,CustomField.name).all()
     grouped=defaultdict(list)
     for f in fields: grouped[f.service_id].append(f)
-    return templates.TemplateResponse('services.html',ctx(request,db,rows=rows,fields_by_service=grouped))
+    return templates.TemplateResponse('services.html',ctx(request,db,rows=rows,fields_by_service=grouped,service_categories=category_options(db,'service')))
 
 @router.post('/services/new')
 def service_new(request:Request,code:str=Form(...),name:str=Form(...),description:str=Form(''),category:str=Form('Другое'),default_priority:str=Form('normal'),default_sla_hours:str=Form(''),db:Session=Depends(get_db)):
@@ -170,11 +172,14 @@ def global_search(request:Request,q:str='',db:Session=Depends(get_db)):
     if not u:return RedirectResponse('/login',303)
     tickets=[]; equipment=[]; articles=[]
     if q:
-        like=f'%{q}%'
-        tq=scope_ticket_query(db.query(Ticket),u).filter((Ticket.title.ilike(like))|(Ticket.description.ilike(like))|(Ticket.number.ilike(like))|(Ticket.requester_name.ilike(like)))
-        tickets=tq.order_by(Ticket.id.desc()).limit(50).all()
-        if has_permission(u,'equipment.view'): equipment=db.query(Equipment).filter((Equipment.name.ilike(like))|(Equipment.inventory_no.ilike(like))|(Equipment.serial_no.ilike(like))).limit(50).all()
-        if has_permission(u,'knowledge.view'): articles=db.query(KnowledgeArticle).filter(KnowledgeArticle.active==True,((KnowledgeArticle.title.ilike(like))|(KnowledgeArticle.body.ilike(like))|(KnowledgeArticle.tags.ilike(like)))).limit(50).all()
+        ticket_pool=scope_ticket_query(db.query(Ticket),u).order_by(Ticket.id.desc()).limit(2000).all()
+        tickets=rank_search(q,ticket_pool,lambda t: f"{t.number} {t.title} {t.description} {t.category} {t.requester_name} {(t.site.name if t.site else '')}",50)
+        if has_permission(u,'equipment.view'):
+            equipment_pool=db.query(Equipment).order_by(Equipment.id.desc()).limit(2000).all()
+            equipment=rank_search(q,equipment_pool,lambda e: f"{e.name} {e.inventory_no} {e.serial_no} {e.model} {e.category} {(e.site.name if e.site else '')}",50)
+        if has_permission(u,'knowledge.view'):
+            article_pool=db.query(KnowledgeArticle).filter(KnowledgeArticle.active==True).order_by(KnowledgeArticle.id.desc()).limit(2000).all()
+            articles=rank_search(q,article_pool,lambda a: f"{a.title} {a.body} {a.tags} {a.equipment_category}",50)
     return templates.TemplateResponse('search.html',ctx(request,db,q=q,tickets=tickets,equipment=equipment,articles=articles))
 
 @router.post('/saved-filters/new')

@@ -14,6 +14,8 @@ from app.routes.web import router as web_router
 from app.routes.api import router as api_router
 from app.routes.enterprise import router as enterprise_router
 from app.routes.operations import router as operations_router
+from app.routes.admin_services import router as admin_services_router
+from app.routes.assets_plus import router as assets_plus_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
@@ -22,6 +24,7 @@ from app.services.automation import process_sla_escalations
 from app.services.email_channel import poll_mailbox
 from app.services.report_subscriptions import process_report_subscriptions
 from app.services.reminders import process_ticket_reminders
+from app.services.system_jobs import run_logged_job
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -30,29 +33,16 @@ Path(settings.upload_dir).mkdir(parents=True,exist_ok=True)
 
 async def maintenance_loop():
     while True:
-        db=SessionLocal()
-        try:
-            generate_due_maintenance(db)
-        except Exception as exc:
-            print("maintenance job error:", exc)
-        finally:
-            db.close()
+        run_logged_job("maintenance", generate_due_maintenance)
         await asyncio.sleep(3600)
 
 
 async def enterprise_loop():
     while True:
-        db=SessionLocal()
-        try:
-            process_sla_escalations(db)
-            poll_mailbox(db)
-            process_report_subscriptions(db)
-            process_ticket_reminders(db)
-        except Exception as exc:
-            print("enterprise background error:", exc)
-            db.rollback()
-        finally:
-            db.close()
+        run_logged_job("sla_escalations", process_sla_escalations)
+        run_logged_job("mailbox", poll_mailbox)
+        run_logged_job("report_subscriptions", process_report_subscriptions)
+        run_logged_job("ticket_reminders", process_ticket_reminders)
         await asyncio.sleep(max(30, settings.enterprise_loop_seconds))
 
 @asynccontextmanager
@@ -93,6 +83,8 @@ app.mount("/static",StaticFiles(directory=str(Path(__file__).resolve().parent/"s
 app.include_router(api_router)
 app.include_router(enterprise_router)
 app.include_router(operations_router)
+app.include_router(admin_services_router)
+app.include_router(assets_plus_router)
 app.include_router(web_router)
 
 

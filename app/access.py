@@ -47,7 +47,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "inventory.view",
         "contractor.view", "contractor.manage",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "report.builder",
-        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
+        "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester", "data.import",
     },
     ROLE_MANAGER: {
         "dashboard.view",
@@ -58,6 +58,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "contractor.view", "kpi.all", "audit.view",
         "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "approval.decide", "report.builder",
         "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
+        "labor.report", "labor.rate.manage",
     },
     ROLE_ADMIN: {
         "*",
@@ -200,6 +201,10 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "automation": bool(user and has_permission(user, "automation.manage")),
         "teams": bool(user and (has_permission(user, "team.manage") or has_permission(user, "ticket.list_all"))),
         "templates": bool(user and has_permission(user, "ticket.template")),
+        "system_services": bool(user and has_permission(user, "integration.manage")),
+        "data_import": bool(user and has_permission(user, "data.import")),
+        "categories": bool(user and has_permission(user, "settings.manage")),
+        "labor": bool(user and has_permission(user, "labor.report")),
     }
 
 

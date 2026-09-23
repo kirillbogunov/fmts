@@ -19,6 +19,11 @@ class User(Base):
     telegram_chat_id: Mapped[str] = mapped_column(String(80), default="")
     totp_secret: Mapped[str] = mapped_column(String(64), default="")
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True, index=True)
+    manager_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    external_dn: Mapped[str] = mapped_column(String(500), default="", index=True)
+    directory_source: Mapped[str] = mapped_column(String(30), default="local")
+    hourly_rate: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
 
 class Site(Base):
     __tablename__ = "sites"
@@ -75,6 +80,7 @@ class Ticket(Base):
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     labor_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
+    manual_labor_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     parts_cost: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     one_c_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     web_uid: Mapped[str | None] = mapped_column(String(36), default=lambda: str(uuid.uuid4()), unique=True, nullable=True, index=True)
@@ -130,6 +136,8 @@ class TicketWorkSession(Base):
     duration_seconds: Mapped[int] = mapped_column(Integer, default=0)
     note: Mapped[str] = mapped_column(String(255), default="")
     source: Mapped[str] = mapped_column(String(20), default="timer")
+    hourly_rate_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
+    labor_amount: Mapped[Decimal | None] = mapped_column(Numeric(12,2), nullable=True)
     ticket: Mapped[Ticket] = relationship(back_populates="work_sessions")
     user: Mapped[User] = relationship()
 
@@ -218,6 +226,20 @@ class UiStyle(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+
+# ---- CMDB taxonomy / analytics extension v0.7.3 ----
+class CategoryNode(Base):
+    __tablename__ = "category_nodes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(30), default="ticket", index=True)
+    name: Mapped[str] = mapped_column(String(180), index=True)
+    code: Mapped[str] = mapped_column(String(180), default="", index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("category_nodes.id"), nullable=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 # ---- Enterprise ServiceDesk extension v0.6 ----
@@ -450,3 +472,43 @@ class TicketReminder(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     user: Mapped[User] = relationship()
     ticket: Mapped[Ticket] = relationship()
+
+
+# ---- Integration / directory extension v0.7.2 ----
+class Department(Base):
+    __tablename__ = "departments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    external_key: Mapped[str] = mapped_column(String(500), default="", index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class EmailRule(Base):
+    __tablename__ = "email_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sender_contains: Mapped[str] = mapped_column(String(180), default="")
+    subject_contains: Mapped[str] = mapped_column(String(180), default="")
+    recipient_contains: Mapped[str] = mapped_column(String(180), default="")
+    category: Mapped[str] = mapped_column(String(100), default="")
+    priority: Mapped[str] = mapped_column(String(20), default="")
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("support_groups.id"), nullable=True, index=True)
+    add_recipients_as_observers: Mapped[bool] = mapped_column(Boolean, default=True)
+    active_days: Mapped[str] = mapped_column(String(30), default="0,1,2,3,4,5,6")
+    time_from: Mapped[str] = mapped_column(String(5), default="00:00")
+    time_to: Mapped[str] = mapped_column(String(5), default="23:59")
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    group: Mapped[SupportGroup | None] = relationship()
+
+class BackgroundServiceLog(Base):
+    __tablename__ = "background_service_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    service: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="ok", index=True)
+    message: Mapped[str] = mapped_column(String(500), default="")
+    details: Mapped[str] = mapped_column(Text, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)

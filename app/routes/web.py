@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, csv, io, json, mimetypes, os, secrets, textwrap
+import base64, csv, io, json, mimetypes, os, secrets, textwrap, hmac
 from datetime import datetime, date, timedelta
 from html import escape as html_escape
 from pathlib import Path
@@ -13,7 +13,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
 from app.services.one_c import OneCClient
@@ -23,7 +23,7 @@ from app.services.ui_styles import styles_cache, badge_css, display_name, option
 from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
-from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time
+from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time, apply_session_cost, recalculate_ticket_labor_cost, money
 from app.services.materials import ticket_material_summary, recalc_ticket_parts_cost, as_money, movement_amount, movement_unit_cost
 from app.access import has_permission, scope_ticket_query, can_view_ticket, can_comment_ticket, can_issue_stock, can_track_ticket_time, allowed_statuses, can_change_ticket_status, visible_navigation, role_summary
 from app.services.audit import audit
@@ -32,6 +32,7 @@ from app.services.automation import apply_ticket_rules
 from app.services.notifications import notify_user
 from app.services.operations import pick_group_assignee, sync_group_observers
 from app.services.ticket_lifecycle import ensure_initial_history, transition_ticket, effective_sla_due, status_timeline
+from app.services.categories import category_options
 
 router=APIRouter()
 templates=Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
@@ -156,6 +157,27 @@ def login(request:Request, username:str=Form(...), password:str=Form(...), otp:s
     request.session["user_id"]=u.id
     audit(db,request,u,"auth.login",entity_type="user",entity_id=u.id,details="Вход выполнен")
     target=next_url if next_url.startswith("/") and not next_url.startswith("//") else "/"
+    return RedirectResponse(target,303)
+
+
+@router.get("/auth/sso")
+def sso_gateway(request:Request, next:str="", db:Session=Depends(get_db)):
+    # Header based SSO is intentionally disabled by default. It is safe only
+    # behind a reverse proxy/IdP that strips client supplied headers.
+    if not settings.sso_enabled or not settings.sso_shared_secret:
+        return Response("SSO disabled", status_code=404)
+    supplied=request.headers.get(settings.sso_secret_header,"")
+    if not hmac.compare_digest(supplied, settings.sso_shared_secret):
+        return Response("Forbidden", status_code=403)
+    username=request.headers.get(settings.sso_user_header,"").strip()
+    if not username:
+        return Response("SSO user header missing", status_code=400)
+    u=db.query(User).filter(User.username==username,User.active==True).first()
+    if not u:
+        return Response("SSO user is not synchronized in FMTS", status_code=403)
+    request.session["user_id"]=u.id
+    audit(db,request,u,"auth.sso",entity_type="user",entity_id=u.id,details="Trusted gateway SSO")
+    target=next if next.startswith("/") and not next.startswith("//") else "/"
     return RedirectResponse(target,303)
 
 @router.get("/logout")
@@ -337,7 +359,7 @@ def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get
     technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.assign") else []
     requesters=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.set_requester") else [u]
     groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else []
-    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,requesters=requesters,groups=groups,selected_equipment_id=equipment_id,categories=options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]]),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
+    return templates.TemplateResponse("ticket_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),equipment=db.query(Equipment).order_by(Equipment.name).all(),users=technicians,requesters=requesters,groups=groups,selected_equipment_id=equipment_id,categories=(category_options(db,"ticket") or options_for(db,"category",[(x,x) for x in ["Электрика","Сантехника","Мебель","Отделка","Кондиционер","Окна","Двери","Компьютер","Другое"]])),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all(),custom_fields=db.query(CustomField).filter(CustomField.active==True).order_by(CustomField.sort_order,CustomField.name).all(),custom_field_options={f.id:(json.loads(f.options_json or "[]") if (f.options_json or "").strip().startswith("[") else []) for f in db.query(CustomField).filter(CustomField.active==True).all()}))
 
 @router.post("/tickets/new")
 async def ticket_create(request:Request,title:str=Form(...),description:str=Form(""),category:str=Form("Другое"),priority:str=Form("normal"),service_id:str=Form(""),site_id:int=Form(...),equipment_id:str=Form(""),requester_id:str=Form(""),assignee_id:str=Form(""),group_id:str=Form(""),room:str=Form(""),phone:str=Form(""),attachment:UploadFile|None=File(None),db:Session=Depends(get_db)):
@@ -426,7 +448,7 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,work_time=work_time,active_session=active_session,
         can_track=can_track_ticket_time(u,t),users=technicians,contractors=db.query(Contractor).order_by(Contractor.name).all() if has_permission(u,"contractor.view") or has_permission(u,"ticket.contractor") else [],
         inventory=db.query(InventoryItem).order_by(InventoryItem.name).all() if has_permission(u,"inventory.view") else [],status_options=status_options,
-        materials=materials,total_cost=total_cost,
+        materials=materials,total_cost=total_cost,automatic_labor_cost=(as_money(t.labor_cost)-as_money(t.manual_labor_cost)),
         service=db.get(ServiceCatalog,t.service_id) if t.service_id else None,
         custom_fields=db.query(CustomField).filter(CustomField.active==True,((CustomField.service_id==t.service_id)|(CustomField.service_id.is_(None)))).order_by(CustomField.sort_order,CustomField.name).all(),
         custom_values={x.field_id:x.value for x in db.query(TicketCustomValue).filter(TicketCustomValue.ticket_id==t.id).all()},
@@ -502,10 +524,11 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
         t.contractor_id=requested_contractor
 
     new_cost=Decimal(str(labor_cost or 0))
-    if new_cost != Decimal(str(t.labor_cost or 0)):
+    if new_cost != Decimal(str(t.manual_labor_cost or 0)):
         if not has_permission(u,"ticket.cost"):
-            return forbidden(request,db,u,"ticket.cost","Стоимость работ может корректировать только руководитель или администратор")
-        t.labor_cost=new_cost
+            return forbidden(request,db,u,"ticket.cost","Дополнительную стоимость работ может корректировать только руководитель или администратор")
+        t.manual_labor_cost=new_cost
+        recalculate_ticket_labor_cost(db,t.id)
 
     # Technician is allowed to document only his own assigned work.
     if u.role=="technician" and t.assignee_id!=u.id:
@@ -614,8 +637,8 @@ def ticket_time_manual(ticket_id:int,request:Request,minutes:int=Form(...),work_
     except Exception:
         started=datetime.utcnow()-timedelta(minutes=minutes)
     ended=started+timedelta(minutes=minutes)
-    entry=TicketWorkSession(ticket_id=t.id,user_id=u.id,started_at=started,ended_at=ended,duration_seconds=minutes*60,note=(note or "").strip(),source="manual")
-    db.add(entry); db.commit(); db.refresh(entry)
+    entry=TicketWorkSession(ticket_id=t.id,user_id=u.id,started_at=started,ended_at=ended,duration_seconds=minutes*60,note=(note or "").strip(),source="manual",hourly_rate_snapshot=money(u.hourly_rate))
+    apply_session_cost(entry); db.add(entry); db.flush(); recalculate_ticket_labor_cost(db,t.id); db.commit(); db.refresh(entry)
     audit(db,request,u,"time.manual",entity_type="ticket",entity_id=t.id,details=f"session={entry.id}; minutes={minutes}")
     return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
 
@@ -627,7 +650,7 @@ def ticket_time_delete(ticket_id:int,entry_id:int,request:Request,db:Session=Dep
         return forbidden(request,db,u,"ticket.time.delete","Удалять записи учёта времени может только администратор")
     entry=db.get(TicketWorkSession,entry_id)
     if entry and entry.ticket_id==ticket_id:
-        db.delete(entry); db.commit(); audit(db,request,u,"time.delete",entity_type="ticket",entity_id=ticket_id,details=f"session={entry_id}")
+        db.delete(entry); db.flush(); recalculate_ticket_labor_cost(db,ticket_id); db.commit(); audit(db,request,u,"time.delete",entity_type="ticket",entity_id=ticket_id,details=f"session={entry_id}")
     return RedirectResponse(f"/tickets/{ticket_id}#ticket-time",303)
 
 @router.post("/tickets/{ticket_id}/comment")
@@ -792,7 +815,7 @@ def equipment_new_page(request:Request,db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"equipment.manage"): return forbidden(request,db,u,"equipment.manage")
-    return templates.TemplateResponse("equipment_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),status_options=options_for(db,"equipment_status",list(EQUIPMENT_STATUS_LABELS.items())),equipment_all=db.query(Equipment).order_by(Equipment.name).all(),owners=db.query(User).filter(User.active==True).order_by(User.full_name).all()))
+    return templates.TemplateResponse("equipment_form.html",ctx(request,db,sites=db.query(Site).order_by(Site.name).all(),status_options=options_for(db,"equipment_status",list(EQUIPMENT_STATUS_LABELS.items())),equipment_categories=category_options(db,"equipment"),equipment_all=db.query(Equipment).order_by(Equipment.name).all(),owners=db.query(User).filter(User.active==True).order_by(User.full_name).all()))
 
 @router.post("/equipment/new")
 def equipment_new(request:Request,site_id:int=Form(...),name:str=Form(...),inventory_no:str=Form(...),category:str=Form("Прочее"),model:str=Form(""),serial_no:str=Form(""),status:str=Form("working"),parent_id:str=Form(""),owner_user_id:str=Form(""),criticality:str=Form("normal"),db:Session=Depends(get_db)):
@@ -1023,10 +1046,13 @@ def users_page(request:Request,db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"users.manage"): return forbidden(request,db,u,"users.manage")
-    return templates.TemplateResponse("users.html",ctx(request,db,users=db.query(User).order_by(User.full_name).all()))
+    users=db.query(User).order_by(User.full_name).all()
+    departments={d.id:d for d in db.query(Department).all()}
+    managers={x.id:x for x in users}
+    return templates.TemplateResponse("users.html",ctx(request,db,users=users,departments=departments,managers=managers))
 
 @router.post("/users/new")
-def user_new(request:Request,username:str=Form(...),full_name:str=Form(...),password:str=Form(...),role:str=Form("requester"),email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),db:Session=Depends(get_db)):
+def user_new(request:Request,username:str=Form(...),full_name:str=Form(...),password:str=Form(...),role:str=Form("requester"),email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),hourly_rate:str=Form("0"),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"users.manage"): return forbidden(request,db,u,"users.manage")
@@ -1035,12 +1061,12 @@ def user_new(request:Request,username:str=Form(...),full_name:str=Form(...),pass
     if len(password)<10:
         return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="users.manage",message="Пароль должен содержать не менее 10 символов"),status_code=400)
     if not db.query(User).filter(User.username==username).first():
-        obj=User(username=username,full_name=full_name,password_hash=hash_password(password),role=role,active=True,email=email,phone=phone,telegram_chat_id=telegram_chat_id); db.add(obj); db.commit(); db.refresh(obj)
+        obj=User(username=username,full_name=full_name,password_hash=hash_password(password),role=role,active=True,email=email,phone=phone,telegram_chat_id=telegram_chat_id,hourly_rate=money(hourly_rate)); db.add(obj); db.commit(); db.refresh(obj)
         audit(db,request,u,"user.create",entity_type="user",entity_id=obj.id,details=f"{username}; role={role}")
     return RedirectResponse("/users",303)
 
 @router.post("/users/{user_id}/update")
-def user_update(user_id:int,request:Request,role:str=Form(...),active:str=Form(""),email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),db:Session=Depends(get_db)):
+def user_update(user_id:int,request:Request,role:str=Form(...),active:str=Form(""),email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),hourly_rate:str=Form("0"),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"users.manage"): return forbidden(request,db,u,"users.manage")
@@ -1063,7 +1089,7 @@ def user_update(user_id:int,request:Request,role:str=Form(...),active:str=Form("
         if open_assigned:
             return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="users.manage",message=f"У техника есть незавершённые назначенные заявки: {open_assigned}. Сначала переназначьте их."),status_code=400)
     old=f"role={target.role}; active={target.active}"
-    target.role=role; target.active=new_active; target.email=email; target.phone=phone; target.telegram_chat_id=telegram_chat_id; db.commit()
+    target.role=role; target.active=new_active; target.email=email; target.phone=phone; target.telegram_chat_id=telegram_chat_id; target.hourly_rate=money(hourly_rate); db.commit()
     audit(db,request,u,"user.update",entity_type="user",entity_id=target.id,details=f"{old} -> role={role}; active={new_active}")
     return RedirectResponse("/users",303)
 

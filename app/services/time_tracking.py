@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable
 
 from sqlalchemy.orm import Session
@@ -46,9 +47,11 @@ def ticket_time_summary(db: Session, ticket_id: int, now: datetime | None = None
     by_user: dict[int, dict] = {}
     for entry in entries:
         uid = entry.user_id
-        row = by_user.setdefault(uid, {"user": entry.user, "seconds": 0, "sessions": 0})
+        row = by_user.setdefault(uid, {"user": entry.user, "seconds": 0, "sessions": 0, "amount": Decimal("0.00")})
         row["seconds"] += session_seconds(entry, now)
         row["sessions"] += 1
+        if entry.ended_at is not None:
+            row["amount"] += money(entry.labor_amount)
     return {
         "entries": entries,
         "active": active,
@@ -70,11 +73,39 @@ def ticket_time_totals(db: Session, ticket_ids: Iterable[int], now: datetime | N
     return dict(totals)
 
 
+def money(value) -> Decimal:
+    try:
+        return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except Exception:
+        return Decimal("0.00")
+
+def calculate_session_cost(entry: TicketWorkSession) -> Decimal:
+    seconds = max(0, int(entry.duration_seconds or 0))
+    rate = money(entry.hourly_rate_snapshot if entry.hourly_rate_snapshot is not None else (entry.user.hourly_rate if entry.user else 0))
+    return (rate * Decimal(seconds) / Decimal(3600)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+def apply_session_cost(entry: TicketWorkSession) -> None:
+    if entry.hourly_rate_snapshot is None:
+        entry.hourly_rate_snapshot = money(entry.user.hourly_rate if entry.user else 0)
+    entry.labor_amount = calculate_session_cost(entry)
+
+def recalculate_ticket_labor_cost(db: Session, ticket_id: int) -> Decimal:
+    ticket = db.get(Ticket, ticket_id)
+    if ticket is None:
+        return Decimal("0.00")
+    entries = db.query(TicketWorkSession).filter(TicketWorkSession.ticket_id == ticket_id).all()
+    automatic = sum((money(x.labor_amount) for x in entries if x.ended_at is not None), Decimal("0.00"))
+    total = (money(getattr(ticket, "manual_labor_cost", 0)) + automatic).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    ticket.labor_cost = total
+    return total
+
+
 def _close_entry(entry: TicketWorkSession, now: datetime) -> None:
     if entry.ended_at is not None:
         return
     entry.ended_at = now
     entry.duration_seconds = max(0, int((now - entry.started_at).total_seconds()))
+    apply_session_cost(entry)
 
 
 def close_active_for_user(db: Session, user_id: int, now: datetime | None = None) -> list[TicketWorkSession]:
@@ -84,8 +115,12 @@ def close_active_for_user(db: Session, user_id: int, now: datetime | None = None
         .filter(TicketWorkSession.user_id == user_id, TicketWorkSession.ended_at.is_(None))
         .all()
     )
+    ticket_ids=set()
     for entry in entries:
         _close_entry(entry, now)
+        ticket_ids.add(entry.ticket_id)
+    for ticket_id in ticket_ids:
+        recalculate_ticket_labor_cost(db, ticket_id)
     return entries
 
 
@@ -98,6 +133,7 @@ def close_active_for_ticket(db: Session, ticket_id: int, now: datetime | None = 
     )
     for entry in entries:
         _close_entry(entry, now)
+    recalculate_ticket_labor_cost(db, ticket_id)
     return entries
 
 
@@ -127,6 +163,7 @@ def start_work(db: Session, ticket: Ticket, user: User, note: str = "") -> Ticke
         started_at=now,
         note=(note or "").strip(),
         source="timer",
+        hourly_rate_snapshot=money(user.hourly_rate),
     )
     db.add(entry)
     db.commit()
@@ -149,6 +186,7 @@ def stop_work(db: Session, ticket: Ticket, user: User) -> TicketWorkSession | No
     if entry is None:
         return None
     _close_entry(entry, now)
+    recalculate_ticket_labor_cost(db, ticket.id)
     ticket.updated_at = now
     db.commit()
     db.refresh(entry)

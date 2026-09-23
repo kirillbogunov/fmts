@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.7.1"
+    app_version: str = "0.7.3"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
@@ -58,6 +58,23 @@ class Settings(BaseSettings):
     ldap_bind_password: str = ""
     ldap_user_base_dn: str = ""
     ldap_username_attr: str = "sAMAccountName"
+    ldap_display_name_attr: str = "displayName"
+    ldap_email_attr: str = "mail"
+    ldap_phone_attr: str = "telephoneNumber"
+    ldap_department_attr: str = "department"
+    ldap_manager_attr: str = "manager"
+    ldap_sync_filter: str = "(&(objectClass=user)(!(objectClass=computer)))"
+
+    # Optional trusted-gateway SSO. Keep disabled unless a reverse proxy/IdP
+    # validates the user before forwarding these headers.
+    sso_enabled: bool = False
+    sso_user_header: str = "X-FMTS-User"
+    sso_shared_secret: str = ""
+    sso_secret_header: str = "X-FMTS-SSO-Secret"
+
+    # E-mail command processing
+    email_status_commands_enabled: bool = True
+    email_add_recipients_as_observers: bool = True
 
     # Monthly KPI / technician rating. The weights are normalized automatically.
     kpi_monthly_target_points: float = 30.0

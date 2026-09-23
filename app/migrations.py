@@ -165,3 +165,77 @@ _original_run_lightweight_migrations_v070 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v070(engine)
     _run_v071_lifecycle(engine)
+
+
+# v0.7.2: directory fields used by AD/LDAP synchronization.
+def _run_v072_integrations(engine: Engine) -> None:
+    user_cols = _columns(engine, "users")
+    if not user_cols:
+        return
+    additions = {
+        "department_id": "INTEGER NULL",
+        "manager_user_id": "INTEGER NULL",
+        "external_dn": "VARCHAR(500) DEFAULT ''",
+        "directory_source": "VARCHAR(30) DEFAULT 'local'",
+    }
+    with engine.begin() as conn:
+        for name, ddl in additions.items():
+            if name not in user_cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_department_id ON users (department_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_manager_user_id ON users (manager_user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_external_dn ON users (external_dn)"))
+
+_original_run_lightweight_migrations_v071 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v071(engine)
+    _run_v072_integrations(engine)
+
+# v0.7.3: labor costing and hierarchical classifier fields.
+def _run_v073_cmdb_labor(engine: Engine) -> None:
+    user_cols = _columns(engine, "users")
+    if user_cols and "hourly_rate" not in user_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN hourly_rate NUMERIC(12,2) DEFAULT 0"))
+            conn.execute(text("UPDATE users SET hourly_rate=0 WHERE hourly_rate IS NULL"))
+
+    ticket_cols = _columns(engine, "tickets")
+    if ticket_cols and "manual_labor_cost" not in ticket_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN manual_labor_cost NUMERIC(12,2) DEFAULT 0"))
+            # Preserve previously entered work/service costs as a manual component.
+            conn.execute(text("UPDATE tickets SET manual_labor_cost=COALESCE(labor_cost,0) WHERE manual_labor_cost IS NULL OR manual_labor_cost=0"))
+
+    session_cols = _columns(engine, "ticket_work_sessions")
+    if session_cols:
+        additions = {
+            "hourly_rate_snapshot": "NUMERIC(12,2) NULL",
+            "labor_amount": "NUMERIC(12,2) NULL",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in session_cols:
+                    conn.execute(text(f"ALTER TABLE ticket_work_sessions ADD COLUMN {name} {ddl}"))
+
+    # Base.metadata.create_all creates category_nodes before this migration. Seed the
+    # old flat ticket categories once so existing installations get a usable tree.
+    tables = inspect(engine).get_table_names()
+    if "category_nodes" in tables and "ui_styles" in tables:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO category_nodes (kind, name, code, parent_id, sort_order, active, created_at)
+                SELECT 'ticket', u.name, u.code, NULL, u.sort_order, u.active, CURRENT_TIMESTAMP
+                  FROM ui_styles u
+                 WHERE u.kind='category'
+                   AND NOT EXISTS (
+                       SELECT 1 FROM category_nodes c
+                        WHERE c.kind='ticket' AND c.name=u.name AND c.parent_id IS NULL
+                   )
+            """))
+
+_original_run_lightweight_migrations_v072 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v072(engine)
+    _run_v073_cmdb_labor(engine)
