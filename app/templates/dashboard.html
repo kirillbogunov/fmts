@@ -8,6 +8,41 @@
 {% if due_maintenance is not none %}<div class="metric warn-m"><span>{% if user.role=='technician' %}Мои ТО в ближайшие 7 дней{% else %}ТО в ближайшие 7 дней{% endif %}</span><strong>{{ due_maintenance }}</strong></div>{% endif %}
 {% if low_stock is not none %}<div class="metric"><span>Низкий остаток ЗИП</span><strong>{{ low_stock }}</strong></div>{% endif %}
 </div>
+<div class="dashboard-analytics-grid">
+<section class="panel analytics-panel">
+  <div class="panelhead"><div><h2>Быстрая аналитика</h2><p class="muted">Круговые индикаторы по текущему состоянию заявок</p></div></div>
+  <div class="ring-grid">
+    <div class="ring-card">
+      <div class="ring-chart" style="--percent:{{ dashboard_rings.open_share }}"><span>{{ dashboard_rings.open_share }}%</span></div>
+      <div class="ring-copy"><b>Открытые заявки</b><small>{{ open_count }} из {{ total_count or 0 }}</small></div>
+    </div>
+    <div class="ring-card">
+      <div class="ring-chart success" style="--percent:{{ dashboard_rings.done_share }}"><span>{{ dashboard_rings.done_share }}%</span></div>
+      <div class="ring-copy"><b>Закрыто успешно</b><small>{{ done_count }} из {{ total_count or 0 }}</small></div>
+    </div>
+    <div class="ring-card">
+      <div class="ring-chart warning" style="--percent:{{ dashboard_rings.sla_safe }}"><span>{{ dashboard_rings.sla_safe }}%</span></div>
+      <div class="ring-copy"><b>SLA под контролем</b><small>{% if open_count %}{{ open_count - overdue }} без просрочки{% else %}Открытых заявок нет{% endif %}</small></div>
+    </div>
+  </div>
+</section>
+<section class="panel analytics-panel">
+  <div class="panelhead"><div><h2>Динамика заявок за 7 дней</h2><p class="muted">Линейный график новых обращений</p></div></div>
+  <div class="line-chart-card">
+    <svg class="line-chart" viewBox="0 0 360 180" preserveAspectRatio="none" aria-label="График новых заявок">
+      <line x1="20" y1="140" x2="340" y2="140" class="axis"></line>
+      <line x1="20" y1="40" x2="20" y2="140" class="axis"></line>
+      <polyline class="line-fill" points="20,140 {% for p in daily_series %}{{ p.x }},{{ p.y }} {% endfor %}340,140"></polyline>
+      <polyline class="line-main" points="{% for p in daily_series %}{{ p.x }},{{ p.y }} {% endfor %}"></polyline>
+      {% for p in daily_series %}
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4.5" class="line-dot"></circle>
+        <text x="{{ p.x }}" y="{{ p.y - 10 }}" text-anchor="middle" class="line-value">{{ p.count }}</text>
+        <text x="{{ p.x }}" y="160" text-anchor="middle" class="line-label">{{ p.label }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+</section>
+</div>
 <div class="grid2">
 <section class="panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>
 <table class="responsive-table"><thead><tr><th>№</th><th>Заявка</th><th>Объект</th><th>Статус</th></tr></thead><tbody>

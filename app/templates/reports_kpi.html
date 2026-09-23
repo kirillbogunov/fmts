@@ -27,6 +27,40 @@
   <div class="metric kpi-leader-card"><span>Лидер месяца</span><strong>{% if report.leader %}{{report.leader.name}}{% else %}—{% endif %}</strong>{% if report.leader %}<small>{{report.leader.score}}% · {{report.leader.rating}} / 5</small>{% endif %}</div>
 </div>
 
+<div class="dashboard-analytics-grid kpi-analytics-grid">
+  <section class="panel analytics-panel">
+    <div class="panelhead"><div><h2>Командная аналитика</h2><p class="muted">Круговые индикаторы ключевых показателей</p></div></div>
+    <div class="ring-grid">
+      <div class="ring-card">
+        <div class="ring-chart" style="--percent:{{ report.avg_kpi }}"><span>{{ report.avg_kpi }}%</span></div>
+        <div class="ring-copy"><b>Средний KPI</b><small>Команда за {{ period.label }}</small></div>
+      </div>
+      <div class="ring-card">
+        <div class="ring-chart success" style="--percent:{{ report.team_sla }}"><span>{{ report.team_sla }}%</span></div>
+        <div class="ring-copy"><b>SLA вовремя</b><small>Выполнено без просрочки</small></div>
+      </div>
+      <div class="ring-card">
+        <div class="ring-chart warning" style="--percent:{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}"><span>{{ report.total_points }}</span></div>
+        <div class="ring-copy"><b>Баллы работ</b><small>Суммарная нагрузка команды</small></div>
+      </div>
+    </div>
+  </section>
+  <section class="panel analytics-panel">
+    <div class="panelhead"><div><h2>Топ KPI по исполнителям</h2><p class="muted">Сравнение по итоговому проценту KPI</p></div></div>
+    <div class="bars-list">
+      {% for x in report.rows[:6] %}
+      <div class="bar-row">
+        <div class="bar-copy"><b>{{ x.name }}</b><small>@{{ x.username }}</small></div>
+        <div class="bar-track"><i style="width:{{ x.score }}%"></i></div>
+        <div class="bar-value">{{ x.score }}%</div>
+      </div>
+      {% else %}
+      <p class="muted">Нет данных для построения графика.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
 <section class="panel kpi-rating-panel">
   <div class="panelhead"><div><h2>Рейтинг ремонтников</h2><p class="muted">Целевой объём: {{report.target_points}} баллов работ на месяц</p></div></div>
   <table class="responsive-table kpi-table">

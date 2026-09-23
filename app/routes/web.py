@@ -201,6 +201,31 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
     tq=scope_ticket_query(db.query(Ticket),u)
     recent=tq.order_by(Ticket.id.desc()).limit(8).all()
     by_status=tq.with_entities(Ticket.status,func.count(Ticket.id)).group_by(Ticket.status).all()
+    total_count=tq.count()
+    done_count=tq.filter(Ticket.status=="done").count()
+    open_count=tq.filter(Ticket.status.in_(open_status)).count()
+    overdue_count=tq.filter(Ticket.status.in_(open_status),Ticket.sla_due_at < now).count()
+    dashboard_rings={
+        "open_share": round((open_count/total_count)*100) if total_count else 0,
+        "done_share": round((done_count/total_count)*100) if total_count else 0,
+        "sla_safe": round(((open_count-overdue_count)/open_count)*100) if open_count else 100,
+    }
+    start_day=date.today()-timedelta(days=6)
+    created_rows=tq.with_entities(Ticket.created_at).filter(Ticket.created_at >= datetime.combine(start_day, datetime.min.time())).all()
+    day_counts={start_day+timedelta(days=i):0 for i in range(7)}
+    for created_at, in created_rows:
+        if created_at:
+            created_day=created_at.date()
+            if created_day in day_counts:
+                day_counts[created_day]+=1
+    daily_series=[]
+    max_daily=max(day_counts.values()) if day_counts else 0
+    span=max(1,len(day_counts)-1)
+    for idx,day in enumerate(day_counts):
+        count=day_counts[day]
+        x=20 + (idx * (320/span))
+        y=140 - ((count/max_daily)*96 if max_daily else 0)
+        daily_series.append({"label":day.strftime("%d.%m"),"count":count,"x":round(x,1),"y":round(y,1)})
     equipment_count=db.query(Equipment).count() if has_permission(u,"equipment.view") else None
     if has_permission(u,"maintenance.view_all"):
         due_maintenance=db.query(MaintenancePlan).filter(MaintenancePlan.active==True,MaintenancePlan.next_run<=date.today()+timedelta(days=7)).count()
@@ -210,13 +235,17 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
         due_maintenance=None
     low_stock=db.query(InventoryItem).filter(InventoryItem.qty<=InventoryItem.min_qty).count() if has_permission(u,"inventory.view") else None
     data={
-        "open_count":tq.filter(Ticket.status.in_(open_status)).count(),
-        "overdue":tq.filter(Ticket.status.in_(open_status),Ticket.sla_due_at < now).count(),
+        "open_count":open_count,
+        "overdue":overdue_count,
         "equipment_count":equipment_count,
         "due_maintenance":due_maintenance,
         "low_stock":low_stock,
         "recent":recent,
         "by_status":by_status,
+        "total_count":total_count,
+        "done_count":done_count,
+        "dashboard_rings":dashboard_rings,
+        "daily_series":daily_series,
     }
     return templates.TemplateResponse("dashboard.html",ctx(request,db,**data))
 
