@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "0.5.5"
+    app_version: str = "0.6.0"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
@@ -17,6 +17,47 @@ class Settings(BaseSettings):
     cookie_https_only: bool = False
     comment_photo_max_count: int = 5
     comment_photo_max_mb: int = 12
+
+    # Enterprise ServiceDesk channels and automation
+    enterprise_loop_seconds: int = 60
+    sla_warning_minutes: int = 30
+
+    # E-mail -> ticket and outgoing notifications
+    imap_enabled: bool = False
+    imap_host: str = ""
+    imap_port: int = 993
+    imap_username: str = ""
+    imap_password: str = ""
+    imap_use_ssl: bool = True
+    imap_folder: str = "INBOX"
+    imap_default_site_id: int = 0
+    smtp_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
+    # Telegram / WhatsApp webhook notifications
+    telegram_bot_token: str = ""
+    whatsapp_webhook_url: str = ""
+    whatsapp_webhook_token: str = ""
+
+    # Web Push (optional VAPID)
+    push_vapid_public_key: str = ""
+    push_vapid_private_key: str = ""
+    push_vapid_subject: str = "mailto:admin@example.com"
+
+    # LDAP / Active Directory authentication (optional)
+    ldap_enabled: bool = False
+    ldap_server: str = ""
+    ldap_port: int = 389
+    ldap_use_ssl: bool = False
+    ldap_bind_dn: str = ""
+    ldap_bind_password: str = ""
+    ldap_user_base_dn: str = ""
+    ldap_username_attr: str = "sAMAccountName"
 
     # Monthly KPI / technician rating. The weights are normalized automatically.
     kpi_monthly_target_points: float = 30.0

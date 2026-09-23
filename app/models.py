@@ -14,6 +14,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(30), default="requester")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email: Mapped[str] = mapped_column(String(160), default="")
+    phone: Mapped[str] = mapped_column(String(80), default="")
+    telegram_chat_id: Mapped[str] = mapped_column(String(80), default="")
+    totp_secret: Mapped[str] = mapped_column(String(64), default="")
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 class Site(Base):
     __tablename__ = "sites"
@@ -38,6 +43,9 @@ class Equipment(Base):
     next_maintenance_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     one_c_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     qr_token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("equipment.id"), nullable=True, index=True)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    criticality: Mapped[str] = mapped_column(String(20), default="normal")
     site: Mapped[Site] = relationship(back_populates="equipment")
     tickets: Mapped[list[Ticket]] = relationship(back_populates="equipment")
 
@@ -55,6 +63,7 @@ class Ticket(Base):
     requester_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     contractor_id: Mapped[int | None] = mapped_column(ForeignKey("contractors.id"), nullable=True)
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     sla_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -200,3 +209,157 @@ class UiStyle(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+# ---- Enterprise ServiceDesk extension v0.6 ----
+class ServiceCatalog(Base):
+    __tablename__ = "service_catalog"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(180), index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(100), default="Другое")
+    default_priority: Mapped[str] = mapped_column(String(20), default="normal")
+    default_sla_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+class CustomField(Base):
+    __tablename__ = "custom_fields"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True, index=True)
+    code: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    field_type: Mapped[str] = mapped_column(String(30), default="text")
+    options_json: Mapped[str] = mapped_column(Text, default="[]")
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    service: Mapped[ServiceCatalog | None] = relationship()
+
+class TicketCustomValue(Base):
+    __tablename__ = "ticket_custom_values"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    field_id: Mapped[int] = mapped_column(ForeignKey("custom_fields.id"), index=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+    field: Mapped[CustomField] = relationship()
+
+class KnowledgeArticle(Base):
+    __tablename__ = "knowledge_articles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(240), index=True)
+    body: Mapped[str] = mapped_column(Text, default="")
+    tags: Mapped[str] = mapped_column(String(300), default="")
+    equipment_category: Mapped[str] = mapped_column(String(100), default="")
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("service_catalog.id"), nullable=True, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    service: Mapped[ServiceCatalog | None] = relationship()
+    created_by: Mapped[User | None] = relationship()
+
+class AutomationRule(Base):
+    __tablename__ = "automation_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(180))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    conditions_json: Mapped[str] = mapped_column(Text, default="{}")
+    actions_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(220))
+    body: Mapped[str] = mapped_column(Text, default="")
+    level: Mapped[str] = mapped_column(String(20), default="info")
+    link: Mapped[str] = mapped_column(String(300), default="")
+    dedup_key: Mapped[str | None] = mapped_column(String(180), unique=True, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    user: Mapped[User] = relationship()
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text)
+    p256dh: Mapped[str] = mapped_column(Text, default="")
+    auth: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User] = relationship()
+
+class TicketLink(Base):
+    __tablename__ = "ticket_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    linked_ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    link_type: Mapped[str] = mapped_column(String(30), default="related")
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    linked_ticket: Mapped[Ticket] = relationship(foreign_keys=[linked_ticket_id])
+    created_by: Mapped[User | None] = relationship()
+
+class ApprovalRequest(Base):
+    __tablename__ = "approval_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    requested_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    requested_by: Mapped[User | None] = relationship(foreign_keys=[requested_by_id])
+    approver: Mapped[User | None] = relationship(foreign_keys=[approver_id])
+
+class TicketFeedback(Base):
+    __tablename__ = "ticket_feedback"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    rating: Mapped[int] = mapped_column(Integer)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User | None] = relationship()
+
+class SavedFilter(Base):
+    __tablename__ = "saved_filters"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    filters_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User] = relationship()
+
+class ReportSubscription(Base):
+    __tablename__ = "report_subscriptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    config_json: Mapped[str] = mapped_column(Text, default="{}")
+    periodicity: Mapped[str] = mapped_column(String(20), default="monthly")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    user: Mapped[User] = relationship()
+
+class SlaEvent(Base):
+    __tablename__ = "sla_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(30), index=True)
+    event_key: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class TechnicianAvailability(Base):
+    __tablename__ = "technician_availability"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    weekday: Mapped[int] = mapped_column(Integer)
+    start_time: Mapped[str] = mapped_column(String(5), default="09:00")
+    end_time: Mapped[str] = mapped_column(String(5), default="18:00")
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    user: Mapped[User] = relationship()

@@ -69,3 +69,38 @@ def run_lightweight_migrations(engine: Engine) -> None:
                  WHERE movement_type = 'issue'
                    AND amount IS NULL
             """))
+
+
+    user_cols = _columns(engine, "users")
+    if user_cols:
+        additions = {
+            "email": "VARCHAR(160) DEFAULT ''",
+            "phone": "VARCHAR(80) DEFAULT ''",
+            "telegram_chat_id": "VARCHAR(80) DEFAULT ''",
+            "totp_secret": "VARCHAR(64) DEFAULT ''",
+            "totp_enabled": "BOOLEAN DEFAULT FALSE",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in user_cols:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+
+    equipment_cols = _columns(engine, "equipment")
+    if equipment_cols:
+        additions = {
+            "parent_id": "INTEGER NULL",
+            "owner_user_id": "INTEGER NULL",
+            "criticality": "VARCHAR(20) DEFAULT 'normal'",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in equipment_cols:
+                    conn.execute(text(f"ALTER TABLE equipment ADD COLUMN {name} {ddl}"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_equipment_parent_id ON equipment (parent_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_equipment_owner_user_id ON equipment (owner_user_id)"))
+
+    ticket_cols2 = _columns(engine, "tickets")
+    if ticket_cols2 and "service_id" not in ticket_cols2:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN service_id INTEGER NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_service_id ON tickets (service_id)"))

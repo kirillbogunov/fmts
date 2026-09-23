@@ -12,10 +12,14 @@ from app.db import Base, engine, SessionLocal, get_db
 from app.migrations import run_lightweight_migrations
 from app.routes.web import router as web_router
 from app.routes.api import router as api_router
+from app.routes.enterprise import router as enterprise_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
 from app.access import has_permission
+from app.services.automation import process_sla_escalations
+from app.services.email_channel import poll_mailbox
+from app.services.report_subscriptions import process_report_subscriptions
 
 settings=get_settings()
 Base.metadata.create_all(bind=engine)
@@ -33,6 +37,21 @@ async def maintenance_loop():
             db.close()
         await asyncio.sleep(3600)
 
+
+async def enterprise_loop():
+    while True:
+        db=SessionLocal()
+        try:
+            process_sla_escalations(db)
+            poll_mailbox(db)
+            process_report_subscriptions(db)
+        except Exception as exc:
+            print("enterprise background error:", exc)
+            db.rollback()
+        finally:
+            db.close()
+        await asyncio.sleep(max(30, settings.enterprise_loop_seconds))
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db=SessionLocal()
@@ -41,10 +60,11 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     task=asyncio.create_task(maintenance_loop())
+    enterprise_task=asyncio.create_task(enterprise_loop())
     yield
-    task.cancel()
-    with suppress(asyncio.CancelledError):
-        await task
+    task.cancel(); enterprise_task.cancel()
+    with suppress(asyncio.CancelledError): await task
+    with suppress(asyncio.CancelledError): await enterprise_task
 
 app=FastAPI(
     title=settings.app_name,
@@ -68,6 +88,7 @@ app.add_middleware(
 )
 app.mount("/static",StaticFiles(directory=str(Path(__file__).resolve().parent/"static")),name="static")
 app.include_router(api_router)
+app.include_router(enterprise_router)
 app.include_router(web_router)
 
 

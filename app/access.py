@@ -24,7 +24,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "dashboard.view",
         "ticket.list", "ticket.create", "ticket.comment",
         "site.lookup", "equipment.lookup",
-        "profile.self",
+        "profile.self", "knowledge.view", "service.view", "notifications.view", "feedback.create",
     },
     ROLE_TECHNICIAN: {
         "dashboard.view",
@@ -33,7 +33,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "site.view", "equipment.view", "equipment.lookup",
         "maintenance.view_assigned", "inventory.view",
         "kpi.self",
-        "profile.self",
+        "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request",
     },
     ROLE_DISPATCHER: {
         "dashboard.view",
@@ -45,7 +45,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "maintenance.view_all", "maintenance.manage",
         "inventory.view",
         "contractor.view", "contractor.manage",
-        "profile.self",
+        "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "report.builder",
     },
     ROLE_MANAGER: {
         "dashboard.view",
@@ -54,7 +54,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "ticket.contractor", "ticket.cost", "ticket.materials.view", "ticket.close", "ticket.cancel",
         "site.view", "equipment.view", "maintenance.view_all", "inventory.view",
         "contractor.view", "kpi.all", "audit.view",
-        "profile.self",
+        "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "approval.decide", "report.builder",
     },
     ROLE_ADMIN: {
         "*",
@@ -184,6 +184,11 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "users": bool(user and has_permission(user, "users.manage")),
         "settings": bool(user and has_permission(user, "settings.manage")),
         "audit": bool(user and has_permission(user, "audit.view")),
+        "knowledge": bool(user and has_permission(user, "knowledge.view")),
+        "services": bool(user and has_permission(user, "service.view")),
+        "notifications": bool(user and has_permission(user, "notifications.view")),
+        "reports": bool(user and has_permission(user, "report.builder")),
+        "automation": bool(user and has_permission(user, "automation.manage")),
     }
 
 
