@@ -663,7 +663,7 @@ body.app-body{background:radial-gradient(circle at top left,#eef4ff 0,#f6f8fb 30
 
 @media(max-width:430px){
   .content{padding-left:7px!important;padding-right:7px!important}
-  .mobile-topbar{height:58px!important}.mobile-brand b{font-size:14px!important}.mobile-brand small{font-size:9px!important}
+  .mobile-topbar{height:calc(58px + env(safe-area-inset-top,0px))!important}.mobile-brand b{font-size:14px!important}.mobile-brand small{font-size:9px!important}
   .dashboard-kpis .metric{min-height:108px!important;padding:11px!important}.dashboard-kpis .metric strong{font-size:28px!important}.dashboard-kpis .metric span{font-size:10px!important}.dashboard-kpis .metric small{font-size:9.5px!important}
   .ticket-command-stats{gap:6px!important}.ticket-stat-tile{padding:9px!important}.ticket-stat-icon{width:31px!important;height:31px!important}.ticket-stat-tile strong{font-size:18px!important}
   .mobile-ticket-card{grid-template-columns:30px minmax(0,1fr)!important}.mobile-ticket-card-link{padding-right:10px!important}.mobile-ticket-card h3{font-size:13.5px!important}.mobile-ticket-location{padding:8px 9px!important}.mobile-ticket-footer{align-items:center!important}.mobile-ticket-sla b{font-size:9.5px!important}
@@ -674,3 +674,72 @@ body.app-body{background:radial-gradient(circle at top left,#eef4ff 0,#f6f8fb 30
   .dashboard-kpis{grid-template-columns:1fr!important}.dashboard-kpis .metric:nth-child(5):last-child{grid-column:auto!important}.ticket-command-stats{grid-template-columns:1fr!important}.ticket-stat-tile:last-child:nth-child(odd){grid-column:auto!important}.ticket-saved-row{grid-template-columns:1fr!important}.mobile-ticket-footer{align-items:flex-start!important;flex-direction:column!important}.mobile-ticket-sla{text-align:left!important}.mobile-bottom-nav .mobile-nav-item small{font-size:7.4px!important}
 }
 @media(max-width:780px){.mobile-ticket-card.no-bulk{grid-template-columns:1fr!important}.mobile-ticket-card.no-bulk .mobile-ticket-card-link{grid-column:1!important;padding-left:12px!important}}
+
+
+/* v0.7.6.16 — iPhone safe-area mobile header alignment hotfix */
+@media(max-width:780px){
+  :root{--mobile-topbar-content-h:58px}
+  body.app-body{
+    padding-top:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px))!important;
+  }
+  .mobile-topbar{
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) 44px auto!important;
+    align-items:center!important;
+    gap:8px!important;
+    top:0!important;
+    height:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px))!important;
+    min-height:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px))!important;
+    padding-top:env(safe-area-inset-top,0px)!important;
+    padding-bottom:0!important;
+    padding-left:max(10px,env(safe-area-inset-left,0px))!important;
+    padding-right:max(10px,env(safe-area-inset-right,0px))!important;
+    box-sizing:border-box!important;
+    background:#0f172a!important;
+  }
+  .mobile-menu-btn,
+  .mobile-topbar .install-mini,
+  #installPwaTop{
+    align-self:center!important;
+    justify-self:stretch!important;
+    height:44px!important;
+    min-height:44px!important;
+    margin:0!important;
+    line-height:1!important;
+  }
+  .mobile-menu-btn{
+    width:44px!important;
+    padding:0!important;
+    border-radius:12px!important;
+  }
+  .mobile-brand{
+    align-self:center!important;
+    justify-self:start!important;
+    display:flex!important;
+    flex-direction:column!important;
+    justify-content:center!important;
+    gap:2px!important;
+    height:44px!important;
+    line-height:1.05!important;
+    min-width:0!important;
+  }
+  .mobile-brand b{font-size:15px!important;line-height:1.05!important;margin:0!important}
+  .mobile-brand small{font-size:9.5px!important;line-height:1.05!important;margin:0!important;color:#9fb1c8!important}
+  .mobile-topbar .install-mini{
+    display:grid!important;
+    place-items:center!important;
+    padding:0 11px!important;
+    border-radius:12px!important;
+  }
+  .mobile-topbar a.install-mini{width:44px!important;padding:0!important}
+  #installPwaTop{width:auto!important;max-width:120px!important;padding:0 13px!important;font-size:11px!important}
+}
+@media(max-width:430px){
+  .mobile-topbar{
+    grid-template-columns:42px minmax(0,1fr) 42px auto!important;
+    height:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px))!important;
+    min-height:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px))!important;
+  }
+  .mobile-menu-btn,.mobile-topbar a.install-mini{width:42px!important}
+  #installPwaTop{max-width:108px!important;padding-left:11px!important;padding-right:11px!important}
+}
