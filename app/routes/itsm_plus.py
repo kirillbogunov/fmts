@@ -18,6 +18,7 @@ from app.routes.web import templates, ctx, forbidden
 from app.services.audit import audit
 from app.services.itsm import TICKET_TYPES, RELATION_LABELS
 from app.services.sla_calendar import apply_service_sla
+from app.services.localization import normalize_timezone_name
 from app.services.webhooks import enqueue_event, enqueue_ticket_event, process_webhook_deliveries
 
 router=APIRouter()
@@ -104,7 +105,7 @@ def sla_calendar_new(request:Request,name:str=Form(...),timezone_name:str=Form('
         if not value:continue
         try: holiday_rows.append(datetime.fromisoformat(value).date().isoformat())
         except Exception: pass
-    row=BusinessCalendar(name=name.strip()[:180],timezone=timezone_name.strip()[:64] or 'Asia/Almaty',weekdays=weekdays.strip()[:30] or '0,1,2,3,4',work_start=work_start or '09:00',work_end=work_end or '18:00',holidays_json=json.dumps(sorted(set(holiday_rows))),active=True)
+    row=BusinessCalendar(name=name.strip()[:180],timezone=normalize_timezone_name(timezone_name),weekdays=weekdays.strip()[:30] or '0,1,2,3,4',work_start=work_start or '09:00',work_end=work_end or '18:00',holidays_json=json.dumps(sorted(set(holiday_rows))),active=True)
     db.add(row);db.commit();db.refresh(row)
     audit(db,request,u,'sla.calendar.create',entity_type='business_calendar',entity_id=row.id,details=row.name)
     return RedirectResponse('/sla-calendars',303)
@@ -122,7 +123,7 @@ def sla_calendar_update(calendar_id:int,request:Request,name:str=Form(...),timez
         if not value:continue
         try: hs.append(datetime.fromisoformat(value).date().isoformat())
         except Exception: pass
-    row.name=name.strip()[:180] or row.name;row.timezone=timezone_name.strip()[:64] or 'Asia/Almaty';row.weekdays=weekdays.strip()[:30] or '0,1,2,3,4';row.work_start=work_start or '09:00';row.work_end=work_end or '18:00';row.holidays_json=json.dumps(sorted(set(hs)));row.active=active=='1'
+    row.name=name.strip()[:180] or row.name;row.timezone=normalize_timezone_name(timezone_name,row.timezone or 'Asia/Almaty');row.weekdays=weekdays.strip()[:30] or '0,1,2,3,4';row.work_start=work_start or '09:00';row.work_end=work_end or '18:00';row.holidays_json=json.dumps(sorted(set(hs)));row.active=active=='1'
     db.commit();audit(db,request,u,'sla.calendar.update',entity_type='business_calendar',entity_id=row.id,details=row.name)
     return RedirectResponse('/sla-calendars',303)
 

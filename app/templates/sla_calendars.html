@@ -35,10 +35,18 @@
           <div class="sla-two-col">
             <label>Название календаря<input name="name" required placeholder="Например: Основной график"></label>
             <label>Часовой пояс
-              <select name="timezone" class="sla-timezone-select">
-                {% for zone in supported_timezones %}<option value="{{zone}}" {% if (user.timezone or 'Asia/Almaty')==zone %}selected{% endif %}>{% if zone=='Asia/Almaty' %}Казахстан · UTC+5{% elif zone=='Asia/Qostanay' %}Костанай / Северный Казахстан · UTC+5{% elif zone=='Asia/Aqtobe' %}Актобе · UTC+5{% elif zone=='Asia/Aqtau' %}Актау · UTC+5{% elif zone=='Asia/Atyrau' %}Атырау · UTC+5{% elif zone=='Asia/Oral' %}Уральск · UTC+5{% elif zone=='Asia/Qyzylorda' %}Кызылорда · UTC+5{% elif zone=='Europe/Moscow' %}Москва · UTC+3{% elif zone=='Asia/Yekaterinburg' %}Екатеринбург · UTC+5{% elif zone=='Asia/Omsk' %}Омск · UTC+6{% elif zone=='Asia/Novosibirsk' %}Новосибирск · UTC+7{% elif zone=='UTC' %}UTC{% else %}{{zone}}{% endif %}</option>{% endfor %}
-              </select>
-              <small class="field-hint">Для Петропавловска подходит «Казахстан · UTC+5».</small>
+              <div class="timezone-picker" data-timezone-picker data-initial="{{user.timezone or 'Asia/Almaty'}}">
+                <input type="hidden" name="timezone" value="{{user.timezone or 'Asia/Almaty'}}" data-timezone-value>
+                <button class="timezone-trigger" type="button" data-timezone-trigger aria-haspopup="listbox" aria-expanded="false">
+                  <span><b data-timezone-current>{{timezone_label(user.timezone or 'Asia/Almaty')}}</b><small>{{user.timezone or 'Asia/Almaty'}}</small></span><span class="timezone-chevron">⌄</span>
+                </button>
+                <div class="timezone-popover" data-timezone-popover hidden>
+                  <div class="timezone-search-wrap"><span>⌕</span><input type="search" autocomplete="off" placeholder="Поиск: Алматы, London, New York, UTC+5…" data-timezone-search></div>
+                  <div class="timezone-quick"><button type="button" data-timezone-quick="Asia/Almaty">Казахстан · UTC+5</button><button type="button" data-timezone-quick="UTC">UTC</button></div>
+                  <div class="timezone-options" data-timezone-options role="listbox"></div>
+                </div>
+              </div>
+              <small class="field-hint">Доступны все часовые пояса IANA. Начните вводить город, регион или UTC-смещение.</small>
             </label>
           </div>
         </div>
@@ -99,7 +107,7 @@
             <div class="sla-summary-tags">
               <span>{{c.work_start}}–{{c.work_end}}</span>
               <span>{% if c.weekdays=='0,1,2,3,4' %}Пн–Пт{% elif c.weekdays=='0,1,2,3,4,5' %}Пн–Сб{% elif c.weekdays=='0,1,2,3,4,5,6' %}Каждый день{% else %}Индивидуальный график{% endif %}</span>
-              <span>{% if c.timezone in ['Asia/Almaty','Asia/Qostanay'] %}Казахстан · UTC+5{% else %}{{c.timezone}}{% endif %}</span>
+              <span>{{timezone_label(c.timezone)}}</span>
             </div>
           </div>
           <button class="btn compact" type="button" data-calendar-toggle="{{c.id}}">Настроить</button>
@@ -109,9 +117,17 @@
           <div class="sla-edit-grid">
             <label>Название<input name="name" value="{{c.name}}" required></label>
             <label>Часовой пояс
-              <select name="timezone">
-                {% for zone in supported_timezones %}<option value="{{zone}}" {% if c.timezone==zone %}selected{% endif %}>{% if zone=='Asia/Almaty' %}Казахстан · UTC+5{% elif zone=='Asia/Qostanay' %}Костанай / Северный Казахстан · UTC+5{% elif zone=='Asia/Aqtobe' %}Актобе · UTC+5{% elif zone=='Asia/Aqtau' %}Актау · UTC+5{% elif zone=='Asia/Atyrau' %}Атырау · UTC+5{% elif zone=='Asia/Oral' %}Уральск · UTC+5{% elif zone=='Asia/Qyzylorda' %}Кызылорда · UTC+5{% elif zone=='Europe/Moscow' %}Москва · UTC+3{% elif zone=='Asia/Yekaterinburg' %}Екатеринбург · UTC+5{% elif zone=='Asia/Omsk' %}Омск · UTC+6{% elif zone=='Asia/Novosibirsk' %}Новосибирск · UTC+7{% elif zone=='UTC' %}UTC{% else %}{{zone}}{% endif %}</option>{% endfor %}
-              </select>
+              <div class="timezone-picker compact" data-timezone-picker data-initial="{{c.timezone}}">
+                <input type="hidden" name="timezone" value="{{c.timezone}}" data-timezone-value>
+                <button class="timezone-trigger" type="button" data-timezone-trigger aria-haspopup="listbox" aria-expanded="false">
+                  <span><b data-timezone-current>{{timezone_label(c.timezone)}}</b><small>{{c.timezone}}</small></span><span class="timezone-chevron">⌄</span>
+                </button>
+                <div class="timezone-popover" data-timezone-popover hidden>
+                  <div class="timezone-search-wrap"><span>⌕</span><input type="search" autocomplete="off" placeholder="Город, регион или UTC…" data-timezone-search></div>
+                  <div class="timezone-quick"><button type="button" data-timezone-quick="Asia/Almaty">Казахстан · UTC+5</button><button type="button" data-timezone-quick="UTC">UTC</button></div>
+                  <div class="timezone-options" data-timezone-options role="listbox"></div>
+                </div>
+              </div>
             </label>
           </div>
 
@@ -157,6 +173,7 @@
 
 <script>
 (function(){
+  const timezoneOptions={{ timezone_options|tojson }};
   const dayShort=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   function selectedDays(form){return [...form.querySelectorAll('[data-weekdays] input:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b)}
   function daysLabel(days){
@@ -189,6 +206,34 @@
     if(!values.length){const e=document.createElement('span');e.className='holiday-empty';e.textContent='Исключений пока нет';list.appendChild(e);return;}
     values.forEach(value=>{const chip=document.createElement('span');chip.className='holiday-chip';const d=new Date(value+'T00:00:00');const label=Number.isNaN(d.getTime())?value:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'});chip.innerHTML='<span>'+label+'</span><button type="button" aria-label="Удалить">×</button>';chip.querySelector('button').addEventListener('click',()=>{out.value=values.filter(v=>v!==value).join('\n');renderHolidays(form)});list.appendChild(chip)});
   }
+  function escapeHtml(value){return String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function initTimezonePicker(picker){
+    const valueInput=picker.querySelector('[data-timezone-value]'), trigger=picker.querySelector('[data-timezone-trigger]'), current=picker.querySelector('[data-timezone-current]'), popover=picker.querySelector('[data-timezone-popover]'), search=picker.querySelector('[data-timezone-search]'), list=picker.querySelector('[data-timezone-options]');
+    if(!valueInput||!trigger||!popover||!search||!list)return;
+    let renderedQuery=null;
+    function optionByValue(value){return timezoneOptions.find(x=>x.value===value)}
+    function select(value){const option=optionByValue(value);if(!option)return;valueInput.value=value;current.textContent=option.label;const small=trigger.querySelector('small');if(small)small.textContent=value;close();}
+    function render(query=''){
+      const q=query.trim().toLowerCase();if(renderedQuery===q)return;renderedQuery=q;
+      let rows=timezoneOptions.filter(x=>!q||x.search.includes(q)||x.value.toLowerCase().includes(q));
+      rows=rows.slice(0,700);
+      list.innerHTML='';
+      if(!rows.length){list.innerHTML='<div class="timezone-no-results">Ничего не найдено. Попробуйте название города или UTC-смещение.</div>';return;}
+      let lastGroup='';
+      rows.forEach(opt=>{if(opt.group!==lastGroup){const group=document.createElement('div');group.className='timezone-group';group.textContent=opt.group==='Избранные'?'Часто используемые':opt.group;list.appendChild(group);lastGroup=opt.group;}
+        const btn=document.createElement('button');btn.type='button';btn.className='timezone-option'+(opt.value===valueInput.value?' selected':'');btn.dataset.value=opt.value;btn.setAttribute('role','option');btn.setAttribute('aria-selected',opt.value===valueInput.value?'true':'false');btn.innerHTML='<span><b>'+escapeHtml(opt.label)+'</b><small>'+escapeHtml(opt.value)+'</small></span><i>✓</i>';btn.addEventListener('click',()=>select(opt.value));list.appendChild(btn);});
+    }
+    function open(){document.querySelectorAll('[data-timezone-popover]').forEach(p=>{if(p!==popover)p.hidden=true});popover.hidden=false;trigger.setAttribute('aria-expanded','true');render('');requestAnimationFrame(()=>search.focus());}
+    function close(){popover.hidden=true;trigger.setAttribute('aria-expanded','false');search.value='';renderedQuery=null;}
+    trigger.addEventListener('click',e=>{e.preventDefault();popover.hidden?open():close()});
+    search.addEventListener('input',()=>render(search.value));
+    search.addEventListener('keydown',e=>{if(e.key==='Escape'){close();trigger.focus()}});
+    picker.querySelectorAll('[data-timezone-quick]').forEach(btn=>btn.addEventListener('click',()=>select(btn.dataset.timezoneQuick)));
+    document.addEventListener('click',e=>{if(!picker.contains(e.target))close()});
+    render('');
+  }
+  document.querySelectorAll('[data-timezone-picker]').forEach(initTimezonePicker);
+
   document.querySelectorAll('[data-sla-form]').forEach(form=>{
     form.querySelectorAll('[data-weekdays] input').forEach(input=>input.addEventListener('change',()=>syncForm(form)));
     form.querySelectorAll('[name="work_start"],[name="work_end"]').forEach(input=>input.addEventListener('change',()=>syncForm(form)));

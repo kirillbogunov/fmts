@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 TRANSLATIONS = {
     'ru': {
@@ -39,10 +39,72 @@ TRANSLATIONS = {
 }
 
 SUPPORTED_LOCALES = [('ru','Русский'),('kk','Қазақша'),('en','English')]
-SUPPORTED_TIMEZONES = [
-    'Asia/Almaty','Asia/Aqtobe','Asia/Aqtau','Asia/Atyrau','Asia/Oral','Asia/Qostanay','Asia/Qyzylorda',
+
+# Full IANA timezone catalog. The preferred list is shown first in selectors,
+# while the remaining zones are sorted by region/name. Keeping raw IANA values
+# preserves compatibility with all previously saved calendars and user profiles.
+PREFERRED_TIMEZONES = [
+    'Asia/Almaty','Asia/Qostanay','Asia/Aqtobe','Asia/Aqtau','Asia/Atyrau','Asia/Oral','Asia/Qyzylorda',
     'Europe/Moscow','Asia/Yekaterinburg','Asia/Omsk','Asia/Novosibirsk','UTC'
 ]
+
+try:
+    _ALL_IANA_TIMEZONES = set(available_timezones())
+except Exception:
+    _ALL_IANA_TIMEZONES = set()
+_ALL_IANA_TIMEZONES.update(PREFERRED_TIMEZONES)
+SUPPORTED_TIMEZONES = PREFERRED_TIMEZONES + sorted(_ALL_IANA_TIMEZONES.difference(PREFERRED_TIMEZONES))
+
+_TIMEZONE_RU_NAMES = {
+    'Asia/Almaty':'Казахстан',
+    'Asia/Qostanay':'Костанай / Северный Казахстан',
+    'Asia/Aqtobe':'Актобе',
+    'Asia/Aqtau':'Актау',
+    'Asia/Atyrau':'Атырау',
+    'Asia/Oral':'Уральск',
+    'Asia/Qyzylorda':'Кызылорда',
+    'Europe/Moscow':'Москва',
+    'Asia/Yekaterinburg':'Екатеринбург',
+    'Asia/Omsk':'Омск',
+    'Asia/Novosibirsk':'Новосибирск',
+    'UTC':'UTC',
+}
+
+def _offset_text(name: str) -> str:
+    try:
+        now = datetime.now(timezone.utc).astimezone(ZoneInfo(name))
+        offset = now.utcoffset()
+        if offset is None:
+            return 'UTC'
+        total = int(offset.total_seconds() // 60)
+        sign = '+' if total >= 0 else '-'
+        total = abs(total)
+        hh, mm = divmod(total, 60)
+        return f'UTC{sign}{hh}' if mm == 0 else f'UTC{sign}{hh:02d}:{mm:02d}'
+    except Exception:
+        return 'UTC'
+
+def timezone_label(name: str | None) -> str:
+    value = (name or 'Asia/Almaty').strip() or 'Asia/Almaty'
+    title = _TIMEZONE_RU_NAMES.get(value)
+    if title:
+        return title if value == 'UTC' else f'{title} · {_offset_text(value)}'
+    pretty = value.replace('_',' ')
+    return f'{pretty} · {_offset_text(value)}'
+
+def timezone_options() -> list[dict[str,str]]:
+    rows=[]
+    for value in SUPPORTED_TIMEZONES:
+        group = 'Избранные' if value in PREFERRED_TIMEZONES else (value.split('/',1)[0] if '/' in value else 'Прочее')
+        label = timezone_label(value)
+        rows.append({'value':value,'label':label,'group':group,'search':f'{label} {value}'.lower()})
+    return rows
+
+TIMEZONE_OPTIONS = timezone_options()
+
+def normalize_timezone_name(name: str | None, default: str = 'Asia/Almaty') -> str:
+    value = (name or '').strip()
+    return value if value in _ALL_IANA_TIMEZONES else default
 
 def tr(locale: str | None, key: str, fallback: str | None = None) -> str:
     loc = locale if locale in TRANSLATIONS else 'ru'

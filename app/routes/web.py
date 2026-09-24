@@ -25,7 +25,7 @@ from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
 from app.services.time_tracking import ticket_time_summary, ticket_time_totals, format_duration, start_work, stop_work, close_active_for_ticket, can_track_time, apply_session_cost, recalculate_ticket_labor_cost, money
-from app.services.localization import tr as tr_text, format_dt, SUPPORTED_LOCALES, SUPPORTED_TIMEZONES
+from app.services.localization import tr as tr_text, format_dt, SUPPORTED_LOCALES, SUPPORTED_TIMEZONES, TIMEZONE_OPTIONS, timezone_label
 from app.services.materials import ticket_material_summary, recalc_ticket_parts_cost, as_money, movement_amount, movement_unit_cost
 from app.access import has_permission, scope_ticket_query, can_view_ticket, can_comment_ticket, can_issue_stock, can_track_ticket_time, allowed_statuses, can_change_ticket_status, visible_navigation, role_summary
 from app.services.audit import audit
@@ -125,6 +125,8 @@ def ctx(request, db, **extra):
           "fmt_dt":lambda value,fmt='%d.%m.%Y %H:%M': format_dt(value,(u.timezone if u else settings.default_timezone),fmt),
           "supported_locales":SUPPORTED_LOCALES,
           "supported_timezones":SUPPORTED_TIMEZONES,
+          "timezone_options":TIMEZONE_OPTIONS,
+          "timezone_label":timezone_label,
           "can":lambda permission: bool(u and has_permission(u,permission)),
           "nav":visible_navigation(u),
           "role_summary":role_summary,
