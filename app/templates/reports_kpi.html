@@ -28,27 +28,44 @@
   <div class="metric kpi-leader-card"><span>Лидер месяца</span><strong>{% if report.leader %}{{report.leader.name}}{% else %}—{% endif %}</strong>{% if report.leader %}<small>{{report.leader.score}}% · {{report.leader.rating}} / 5</small>{% endif %}</div>
 </div>
 
-<div class="dashboard-analytics-grid kpi-analytics-grid kpi-pro-grid">
-  <section class="panel analytics-panel chart-panel">
-    <div class="panelhead"><div><h2>Топ KPI по исполнителям</h2><p class="muted">Интерактивное сравнение итогового процента KPI</p></div></div>
-    <div class="chart-shell chart-shell-lg"><canvas id="kpiScoreChart"></canvas></div>
+<div class="dashboard-analytics-grid kpi-analytics-grid kpi-pro-grid kpi-dashboard-v2">
+  <section class="panel analytics-panel chart-panel kpi-ranking-panel">
+    <div class="panelhead kpi-chart-head">
+      <div>
+        <div class="analytics-badge">Рейтинг команды</div>
+        <h2>Профиль KPI по исполнителям</h2>
+        <p class="muted">KPI, SLA и производительность в одной шкале 0–100%. Наведите курсор для подробностей.</p>
+      </div>
+    </div>
+    <div class="chart-shell chart-shell-lg kpi-horizontal-chart"><canvas id="kpiScoreChart"></canvas></div>
+    <div class="kpi-chart-footnote">Фактическое время работы показывается во всплывающей подсказке и не смешивается с процентной шкалой.</div>
   </section>
-  <section class="panel analytics-panel chart-panel">
-    <div class="panelhead"><div><h2>Командная сводка</h2><p class="muted">Круговая аналитика ключевых показателей</p></div></div>
-    <div class="donut-layout donut-layout-kpi">
-      <div class="chart-shell chart-shell-donut"><canvas id="kpiSummaryChart"></canvas></div>
-      <div class="ring-grid upgraded-rings">
-        <div class="ring-card">
-          <div class="ring-chart" style="--percent:{{ report.avg_kpi }}"><span>{{ report.avg_kpi }}%</span></div>
-          <div class="ring-copy"><b>Средний KPI</b><small>Команда за {{ period.label }}</small></div>
+
+  <section class="panel analytics-panel chart-panel kpi-team-panel">
+    <div class="panelhead kpi-chart-head">
+      <div>
+        <div class="analytics-badge">Команда</div>
+        <h2>Командная сводка</h2>
+        <p class="muted">Ключевые показатели за {{ period.label }} без наложения текста и перегруженных карточек.</p>
+      </div>
+    </div>
+    <div class="kpi-team-layout">
+      <div class="kpi-donut-card">
+        <div class="kpi-donut-title"><b>Структура KPI</b><small>Вес показателей в итоговой оценке</small></div>
+        <div class="chart-shell chart-shell-donut kpi-summary-donut"><canvas id="kpiSummaryChart"></canvas></div>
+      </div>
+      <div class="kpi-overview-cards">
+        <div class="kpi-overview-card primary">
+          <div class="ring-chart compact-ring" style="--percent:{{ report.avg_kpi }}"><span>{{ report.avg_kpi }}%</span></div>
+          <div class="kpi-overview-copy"><span>Средний KPI</span><b>{{ report.avg_kpi }}%</b><small>Среднее значение команды</small></div>
         </div>
-        <div class="ring-card">
-          <div class="ring-chart success" style="--percent:{{ report.team_sla }}"><span>{{ report.team_sla }}%</span></div>
-          <div class="ring-copy"><b>SLA вовремя</b><small>Выполнено без просрочки</small></div>
+        <div class="kpi-overview-card success">
+          <div class="ring-chart compact-ring success" style="--percent:{{ report.team_sla }}"><span>{{ report.team_sla }}%</span></div>
+          <div class="kpi-overview-copy"><span>SLA вовремя</span><b>{{ report.team_sla }}%</b><small>Выполнено без просрочки</small></div>
         </div>
-        <div class="ring-card">
-          <div class="ring-chart warning" style="--percent:{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}"><span>{{ report.total_points }}</span></div>
-          <div class="ring-copy"><b>Баллы работ</b><small>Суммарная нагрузка команды</small></div>
+        <div class="kpi-overview-card warning">
+          <div class="ring-chart compact-ring warning" style="--percent:{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}"><span>{{ report.total_points }}</span></div>
+          <div class="kpi-overview-copy"><span>Баллы работ</span><b>{{ report.total_points }}</b><small>{{ ((report.total_points / report.target_points) * 100)|round|int if report.target_points else 0 }}% от командной цели</small></div>
         </div>
       </div>
     </div>
@@ -110,30 +127,54 @@ window.addEventListener('load', function(){
   if (!window.Chart) return;
   const names = {{ report.rows[:8] | map(attribute='name') | list | tojson }};
   const scores = {{ report.rows[:8] | map(attribute='score') | list | tojson }};
+  const slaRates = {{ report.rows[:8] | map(attribute='sla_rate') | list | tojson }};
+  const productivityRates = {{ report.rows[:8] | map(attribute='productivity_rate') | list | tojson }};
   const tracked = {{ report.rows[:8] | map(attribute='tracked_hours') | list | tojson }};
+  const completed = {{ report.rows[:8] | map(attribute='completed') | list | tojson }};
   const ctx = document.getElementById('kpiScoreChart');
   if (ctx) {
+    const canvasCtx = ctx.getContext('2d');
+    const kpiGradient = canvasCtx.createLinearGradient(0, 0, 700, 0);
+    kpiGradient.addColorStop(0, '#2563eb');
+    kpiGradient.addColorStop(1, '#60a5fa');
+    const slaGradient = canvasCtx.createLinearGradient(0, 0, 700, 0);
+    slaGradient.addColorStop(0, '#059669');
+    slaGradient.addColorStop(1, '#34d399');
+    const prodGradient = canvasCtx.createLinearGradient(0, 0, 700, 0);
+    prodGradient.addColorStop(0, '#d97706');
+    prodGradient.addColorStop(1, '#fbbf24');
     new Chart(ctx, {
       type: 'bar',
       data: {
         labels: names,
         datasets: [
-          {label: 'KPI, %', data: scores, borderRadius: 10, backgroundColor: ['#2563eb','#3b82f6','#60a5fa','#0ea5e9','#38bdf8','#8b5cf6','#10b981','#f59e0b']},
-          {label: 'Факт. время, ч', data: tracked, type: 'line', borderColor: '#0f172a', backgroundColor: '#0f172a', tension: 0.35, yAxisID: 'y1', pointRadius: 3, pointHoverRadius: 5}
+          {label: 'KPI', data: scores, backgroundColor: kpiGradient, borderRadius: 10, borderSkipped: false, barThickness: 13},
+          {label: 'SLA', data: slaRates, backgroundColor: slaGradient, borderRadius: 10, borderSkipped: false, barThickness: 13},
+          {label: 'Производительность', data: productivityRates, backgroundColor: prodGradient, borderRadius: 10, borderSkipped: false, barThickness: 13}
         ]
       },
       options: {
+        indexAxis: 'y',
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {mode: 'index', intersect: false},
+        interaction: {mode: 'nearest', axis: 'y', intersect: false},
+        layout: {padding: {right: 12}},
         plugins: {
-          legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 10}},
-          tooltip: {backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#e2e8f0'}
+          legend: {position: 'bottom', labels: {usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 18, color: '#526174', font: {weight: 700}}},
+          tooltip: {
+            backgroundColor: '#0f172a', titleColor: '#fff', bodyColor: '#e2e8f0', padding: 12, cornerRadius: 10,
+            callbacks: {
+              afterBody: (items) => {
+                const i = items && items[0] ? items[0].dataIndex : 0;
+                return [`Фактическое время: ${tracked[i] ?? 0} ч`, `Выполнено заявок: ${completed[i] ?? 0}`];
+              },
+              label: (item) => ` ${item.dataset.label}: ${item.raw}%`
+            }
+          }
         },
         scales: {
-          x: {grid: {display: false}, ticks: {color: '#64748b'}},
-          y: {beginAtZero: true, max: 100, grid: {color: 'rgba(148,163,184,0.18)'}, ticks: {color: '#64748b', callback: (v) => v + '%'}},
-          y1: {beginAtZero: true, position: 'right', grid: {display: false}, ticks: {color: '#64748b', callback: (v) => v + ' ч'}}
+          x: {beginAtZero: true, max: 100, grid: {color: 'rgba(148,163,184,0.16)'}, border: {display: false}, ticks: {color: '#7a8798', callback: (v) => v + '%'}},
+          y: {grid: {display: false}, border: {display: false}, ticks: {color: '#334155', font: {weight: 700}, autoSkip: false}}
         }
       }
     });
