@@ -483,6 +483,19 @@ class TechnicianAvailability(Base):
     available: Mapped[bool] = mapped_column(Boolean, default=True)
     user: Mapped[User] = relationship()
 
+class TechnicianAvailabilityException(Base):
+    __tablename__ = "technician_availability_exceptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    exception_date: Mapped[date] = mapped_column(Date, index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="day_off")
+    start_time: Mapped[str] = mapped_column(String(5), default="09:00")
+    end_time: Mapped[str] = mapped_column(String(5), default="18:00")
+    available: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user: Mapped[User] = relationship()
+
 
 # ---- ServiceDesk operations extension v0.7 (phase 1) ----
 class SupportGroup(Base):

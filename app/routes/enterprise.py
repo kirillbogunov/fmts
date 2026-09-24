@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json, qrcode, mimetypes, secrets
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
@@ -12,7 +12,7 @@ from app.db import get_db
 from app.config import get_settings
 from app.models import (User, Site, Equipment, Ticket, ServiceCatalog, CustomField, TicketCustomValue,
     KnowledgeArticle, KnowledgeAttachment, AutomationRule, Notification, PushSubscription, TicketLink, ApprovalRequest,
-    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, BusinessCalendar, SupportGroup)
+    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, TechnicianAvailabilityException, BusinessCalendar, SupportGroup)
 from app.security import current_user, generate_totp_secret, verify_totp, totp_uri
 from app.access import has_permission, can_view_ticket, scope_ticket_query
 from app.routes.web import ctx, templates, forbidden
@@ -506,14 +506,120 @@ def profile_2fa_disable(request:Request,code:str=Form(...),db:Session=Depends(ge
     return RedirectResponse('/profile',303)
 
 # ---------- Technician schedule ----------
+_WEEKDAY_LABELS=['Пн','Вт','Ср','Чт','Пт','Сб','Вс']
+_EXCEPTION_LABELS={
+    'day_off':'Выходной',
+    'vacation':'Отпуск',
+    'sick':'Больничный',
+    'duty':'Дежурство',
+    'temporary_shift':'Временная смена',
+}
+
+def _default_technician_day(weekday:int)->dict:
+    return {'weekday':weekday,'label':_WEEKDAY_LABELS[weekday],'available':weekday<5,'start_time':'09:00','end_time':'18:00','custom':False}
+
+def _schedule_day_dict(row:TechnicianAvailability|None, weekday:int)->dict:
+    if not row:
+        return _default_technician_day(weekday)
+    return {'weekday':weekday,'label':_WEEKDAY_LABELS[weekday],'available':bool(row.available),'start_time':row.start_time or '09:00','end_time':row.end_time or '18:00','custom':True}
+
+def _minutes_between(start_time:str,end_time:str)->int:
+    try:
+        sh,sm=[int(x) for x in start_time.split(':',1)]; eh,em=[int(x) for x in end_time.split(':',1)]
+        return max(0,(eh*60+em)-(sh*60+sm))
+    except Exception:
+        return 0
+
 @router.get('/team/schedule',response_class=HTMLResponse)
-def team_schedule(request:Request,db:Session=Depends(get_db)):
+def team_schedule(request:Request,user_id:int|None=None,db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
     if u.role not in {'dispatcher','manager','admin'}:return forbidden(request,db,u,'schedule.view')
-    techs=db.query(User).filter(User.role=='technician',User.active==True).order_by(User.full_name).all(); rows=db.query(TechnicianAvailability).all()
-    return templates.TemplateResponse('team_schedule.html',ctx(request,db,technicians=techs,rows=rows))
+    techs=db.query(User).filter(User.role=='technician',User.active==True).order_by(User.full_name).all()
+    selected=None
+    if techs:
+        selected=next((x for x in techs if x.id==user_id),techs[0])
+    weekly=[]; exceptions=[]; weekly_minutes=0
+    if selected:
+        rows=db.query(TechnicianAvailability).filter(TechnicianAvailability.user_id==selected.id).all()
+        by_day={r.weekday:r for r in rows}
+        weekly=[_schedule_day_dict(by_day.get(i),i) for i in range(7)]
+        weekly_minutes=sum(_minutes_between(d['start_time'],d['end_time']) for d in weekly if d['available'])
+        exceptions=(db.query(TechnicianAvailabilityException)
+            .filter(TechnicianAvailabilityException.user_id==selected.id)
+            .order_by(TechnicianAvailabilityException.exception_date.desc(),TechnicianAvailabilityException.id.desc())
+            .limit(80).all())
+    today=date.today()
+    technician_cards=[]
+    for tech in techs:
+        exc=(db.query(TechnicianAvailabilityException)
+             .filter(TechnicianAvailabilityException.user_id==tech.id,TechnicianAvailabilityException.exception_date==today)
+             .order_by(TechnicianAvailabilityException.id.desc()).first())
+        if exc:
+            available=bool(exc.available); summary=(_EXCEPTION_LABELS.get(exc.kind,exc.kind) if not exc.available else f"{_EXCEPTION_LABELS.get(exc.kind,exc.kind)} · {exc.start_time}–{exc.end_time}")
+        else:
+            row=(db.query(TechnicianAvailability)
+                 .filter(TechnicianAvailability.user_id==tech.id,TechnicianAvailability.weekday==today.weekday()).first())
+            day=_schedule_day_dict(row,today.weekday())
+            available=day['available']; summary=(f"{day['start_time']}–{day['end_time']}" if available else 'Выходной')
+        technician_cards.append({'user':tech,'available':available,'summary':summary})
+    return templates.TemplateResponse('team_schedule.html',ctx(request,db,
+        technicians=techs,selected_technician=selected,weekly=weekly,exceptions=exceptions,
+        exception_labels=_EXCEPTION_LABELS,technician_cards=technician_cards,
+        weekly_hours=round(weekly_minutes/60,1),working_days=sum(1 for d in weekly if d['available']),today=today))
 
+@router.post('/team/schedule/week')
+async def team_schedule_week_save(request:Request,user_id:int=Form(...),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if u.role not in {'dispatcher','manager','admin'}:return forbidden(request,db,u,'schedule.manage')
+    tech=db.get(User,user_id)
+    if not tech or tech.role!='technician':return RedirectResponse('/team/schedule',303)
+    form=await request.form()
+    for weekday in range(7):
+        row=db.query(TechnicianAvailability).filter(TechnicianAvailability.user_id==user_id,TechnicianAvailability.weekday==weekday).first()
+        if not row:
+            row=TechnicianAvailability(user_id=user_id,weekday=weekday);db.add(row)
+        row.available=f'available_{weekday}' in form
+        row.start_time=str(form.get(f'start_{weekday}') or '09:00')[:5]
+        row.end_time=str(form.get(f'end_{weekday}') or '18:00')[:5]
+    db.commit()
+    audit(db,request,u,'schedule.week_update',entity_type='user',entity_id=user_id,details=f'Техник: {tech.full_name}')
+    return RedirectResponse(f'/team/schedule?user_id={user_id}&saved=1',303)
+
+@router.post('/team/schedule/exception/add')
+def team_schedule_exception_add(request:Request,user_id:int=Form(...),exception_date:str=Form(...),kind:str=Form('day_off'),start_time:str=Form('09:00'),end_time:str=Form('18:00'),note:str=Form(''),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if u.role not in {'dispatcher','manager','admin'}:return forbidden(request,db,u,'schedule.manage')
+    tech=db.get(User,user_id)
+    if not tech or tech.role!='technician':return RedirectResponse('/team/schedule',303)
+    try: ex_date=date.fromisoformat(exception_date)
+    except Exception: return RedirectResponse(f'/team/schedule?user_id={user_id}&error=date',303)
+    if kind not in _EXCEPTION_LABELS: kind='day_off'
+    available=kind in {'duty','temporary_shift'}
+    row=(db.query(TechnicianAvailabilityException)
+         .filter(TechnicianAvailabilityException.user_id==user_id,TechnicianAvailabilityException.exception_date==ex_date).first())
+    if not row:
+        row=TechnicianAvailabilityException(user_id=user_id,exception_date=ex_date);db.add(row)
+    row.kind=kind; row.available=available; row.start_time=(start_time or '09:00')[:5]; row.end_time=(end_time or '18:00')[:5]; row.note=(note or '').strip()[:300]
+    db.commit(); db.refresh(row)
+    audit(db,request,u,'schedule.exception_save',entity_type='availability_exception',entity_id=row.id,details=f'{tech.full_name}: {ex_date} {_EXCEPTION_LABELS[kind]}')
+    return RedirectResponse(f'/team/schedule?user_id={user_id}&exception_saved=1',303)
+
+@router.post('/team/schedule/exception/{exception_id}/delete')
+def team_schedule_exception_delete(exception_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if u.role not in {'dispatcher','manager','admin'}:return forbidden(request,db,u,'schedule.manage')
+    row=db.get(TechnicianAvailabilityException,exception_id)
+    if not row:return RedirectResponse('/team/schedule',303)
+    user_id=row.user_id
+    db.delete(row);db.commit()
+    audit(db,request,u,'schedule.exception_delete',entity_type='availability_exception',entity_id=exception_id)
+    return RedirectResponse(f'/team/schedule?user_id={user_id}',303)
+
+# Legacy single-day endpoint kept for compatibility with old bookmarks/forms.
 @router.post('/team/schedule/save')
 def team_schedule_save(request:Request,user_id:int=Form(...),weekday:int=Form(...),start_time:str=Form('09:00'),end_time:str=Form('18:00'),available:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
@@ -521,4 +627,5 @@ def team_schedule_save(request:Request,user_id:int=Form(...),weekday:int=Form(..
     if u.role not in {'dispatcher','manager','admin'}:return forbidden(request,db,u,'schedule.manage')
     row=db.query(TechnicianAvailability).filter(TechnicianAvailability.user_id==user_id,TechnicianAvailability.weekday==weekday).first()
     if not row:row=TechnicianAvailability(user_id=user_id,weekday=weekday);db.add(row)
-    row.start_time=start_time;row.end_time=end_time;row.available=bool(available);db.commit();return RedirectResponse('/team/schedule',303)
+    row.start_time=start_time;row.end_time=end_time;row.available=bool(available);db.commit()
+    return RedirectResponse(f'/team/schedule?user_id={user_id}',303)

@@ -1,1 +1,170 @@
-{% extends "base.html" %}{% block content %}<div class="pagehead"><div><h1>График техников</h1><p>Доступность учитывается автоматическим назначением.</p></div></div><section class="panel"><table class="responsive-table"><thead><tr><th>Техник</th><th>День</th><th>Время</th><th>Доступен</th></tr></thead><tbody>{% for r in rows %}<tr><td>{{r.user.full_name}}</td><td>{{['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][r.weekday]}}</td><td>{{r.start_time}}–{{r.end_time}}</td><td>{% if r.available %}Да{% else %}Нет{% endif %}</td></tr>{% else %}<tr><td colspan="4">Индивидуальный график не задан — используется стандартная доступность.</td></tr>{% endfor %}</tbody></table></section><section class="panel"><h2>Добавить / изменить день</h2><form class="form-grid" method="post" action="/team/schedule/save"><label>Техник<select name="user_id">{% for x in technicians %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label><label>День<select name="weekday">{% for i in range(7) %}<option value="{{i}}">{{['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][i]}}</option>{% endfor %}</select></label><label>С<input type="time" name="start_time" value="09:00"></label><label>До<input type="time" name="end_time" value="18:00"></label><label class="inline-check"><input type="checkbox" name="available" value="1" checked> доступен</label><button class="btn primary">Сохранить</button></form></section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Графики сотрудников — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead schedule-pagehead">
+  <div>
+    <div class="eyebrow">УПРАВЛЕНИЕ / СОТРУДНИКИ</div>
+    <h1>Графики сотрудников</h1>
+    <p>FMTS использует этот график только для автоматического назначения заявок. Это не табель рабочего времени.</p>
+  </div>
+</div>
+
+{% if not technicians %}
+<section class="panel schedule-empty">
+  <div class="schedule-empty-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#calendar-clock"></use></svg></div>
+  <h2>Нет активных техников</h2>
+  <p class="muted">Сначала добавьте сотрудника с ролью «Техник» в разделе пользователей.</p>
+  <a class="btn primary" href="/users">Открыть пользователей</a>
+</section>
+{% else %}
+<section class="panel schedule-people-panel">
+  <div class="panelhead panelhead-tight">
+    <div><h2>Кто доступен сегодня</h2><p class="muted">Быстрый обзор текущей доступности для автоназначения.</p></div>
+  </div>
+  <div class="schedule-people-strip">
+    {% for card in technician_cards %}
+    <a class="schedule-person-card {% if selected_technician and selected_technician.id==card.user.id %}active{% endif %}" href="/team/schedule?user_id={{card.user.id}}">
+      <div class="schedule-person-avatar">{{(card.user.full_name or card.user.username)[:1]|upper}}</div>
+      <div class="schedule-person-main"><b>{{card.user.full_name}}</b><small>{{card.summary}}</small></div>
+      <span class="schedule-state {% if card.available %}online{% else %}offline{% endif %}">{{'Доступен' if card.available else 'Недоступен'}}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="schedule-layout">
+  <section class="panel schedule-week-panel">
+    <div class="schedule-editor-head">
+      <div>
+        <span class="schedule-kicker">СТАНДАРТНЫЙ ГРАФИК</span>
+        <h2>{{selected_technician.full_name}}</h2>
+        <p class="muted">Обычная рабочая неделя. Исключения на конкретные даты задаются отдельно и имеют приоритет.</p>
+      </div>
+      <form class="schedule-tech-select" method="get" action="/team/schedule">
+        <label>Техник
+          <select name="user_id" onchange="this.form.submit()">
+            {% for tech in technicians %}<option value="{{tech.id}}" {% if tech.id==selected_technician.id %}selected{% endif %}>{{tech.full_name}}</option>{% endfor %}
+          </select>
+        </label>
+      </form>
+    </div>
+
+    <div class="schedule-summary-row">
+      <div><span>Рабочих дней</span><strong>{{working_days}}</strong></div>
+      <div><span>Часов в неделю</span><strong>{{weekly_hours}} ч</strong></div>
+      <div><span>Часовой пояс</span><strong>{{selected_technician.timezone or 'Asia/Almaty'}}</strong></div>
+    </div>
+
+    <form method="post" action="/team/schedule/week" class="schedule-week-form" id="scheduleWeekForm">
+      <input type="hidden" name="user_id" value="{{selected_technician.id}}">
+      <div class="schedule-presets">
+        <span>Быстрый график</span>
+        <button type="button" class="btn compact schedule-preset" data-preset="5x2">Пн–Пт</button>
+        <button type="button" class="btn compact schedule-preset" data-preset="6x1">Пн–Сб</button>
+        <button type="button" class="btn compact schedule-preset" data-preset="daily">Каждый день</button>
+      </div>
+      <div class="schedule-week-grid">
+        {% for day in weekly %}
+        <div class="schedule-day-card {% if not day.available %}day-off{% endif %}" data-schedule-day="{{day.weekday}}">
+          <div class="schedule-day-top">
+            <div><b>{{day.label}}</b><small class="schedule-day-state">{{'Рабочий день' if day.available else 'Выходной'}}</small></div>
+            <label class="switch-control" aria-label="{{day.label}} рабочий день">
+              <input type="checkbox" name="available_{{day.weekday}}" value="1" {% if day.available %}checked{% endif %}>
+              <span></span>
+            </label>
+          </div>
+          <div class="schedule-time-row">
+            <label>С<input type="time" name="start_{{day.weekday}}" value="{{day.start_time}}"></label>
+            <span>—</span>
+            <label>До<input type="time" name="end_{{day.weekday}}" value="{{day.end_time}}"></label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="schedule-save-row">
+        <p><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#info"></use></svg> Если индивидуальный график не задан, FMTS использует стандарт: Пн–Пт 09:00–18:00.</p>
+        <button class="btn primary" type="submit">Сохранить неделю</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel schedule-exception-create">
+    <span class="schedule-kicker">ИСКЛЮЧЕНИЕ</span>
+    <h2>Изменить один день</h2>
+    <p class="muted">Отпуск, больничный, дополнительный выходной, дежурство или временная смена.</p>
+    <form method="post" action="/team/schedule/exception/add" class="form schedule-exception-form" id="exceptionForm">
+      <input type="hidden" name="user_id" value="{{selected_technician.id}}">
+      <label>Дата<input type="date" name="exception_date" required></label>
+      <label>Что происходит
+        <select name="kind" id="exceptionKind">
+          <option value="day_off">Выходной</option>
+          <option value="vacation">Отпуск</option>
+          <option value="sick">Больничный</option>
+          <option value="duty">Дежурство</option>
+          <option value="temporary_shift">Временная смена</option>
+        </select>
+      </label>
+      <div class="schedule-exception-times" id="exceptionTimes" hidden>
+        <label>С<input type="time" name="start_time" value="09:00"></label>
+        <label>До<input type="time" name="end_time" value="18:00"></label>
+      </div>
+      <label>Комментарий <small class="field-hint">необязательно</small><input name="note" maxlength="300" placeholder="Например: дежурство по магазину №2"></label>
+      <button class="btn primary" type="submit">Добавить исключение</button>
+    </form>
+  </aside>
+</div>
+
+<section class="panel schedule-exceptions-panel">
+  <div class="panelhead panelhead-tight">
+    <div><h2>Исключения из графика</h2><p class="muted">Конкретная дата всегда важнее стандартной недели.</p></div>
+    <span class="badge">{{exceptions|length}}</span>
+  </div>
+  <div class="schedule-exception-list">
+    {% for ex in exceptions %}
+    <div class="schedule-exception-item {% if ex.available %}work{% else %}absence{% endif %}">
+      <div class="schedule-exception-date"><b>{{ex.exception_date.strftime('%d.%m.%Y')}}</b><small>{{['Пн','Вт','Ср','Чт','Пт','Сб','Вс'][ex.exception_date.weekday()]}}</small></div>
+      <div class="schedule-exception-body">
+        <span class="schedule-exception-kind">{{exception_labels.get(ex.kind,ex.kind)}}</span>
+        {% if ex.available %}<b>{{ex.start_time}}–{{ex.end_time}}</b>{% else %}<b>Недоступен для автоназначения</b>{% endif %}
+        {% if ex.note %}<small>{{ex.note}}</small>{% endif %}
+      </div>
+      <form method="post" action="/team/schedule/exception/{{ex.id}}/delete" onsubmit="return confirm('Удалить исключение?')">
+        <button class="icon-btn danger-icon" type="submit" aria-label="Удалить"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#trash"></use></svg></button>
+      </form>
+    </div>
+    {% else %}
+    <div class="schedule-no-exceptions"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#calendar"></use></svg><div><b>Исключений пока нет</b><span>Стандартный недельный график действует без изменений.</span></div></div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<script>
+(function(){
+  const form=document.getElementById('scheduleWeekForm');
+  if(form){
+    function syncCard(card){
+      const check=card.querySelector('input[type="checkbox"]');
+      const state=card.querySelector('.schedule-day-state');
+      card.classList.toggle('day-off',!check.checked);
+      state.textContent=check.checked?'Рабочий день':'Выходной';
+      card.querySelectorAll('input[type="time"]').forEach(el=>el.disabled=!check.checked);
+    }
+    form.querySelectorAll('[data-schedule-day]').forEach(card=>{
+      const check=card.querySelector('input[type="checkbox"]');
+      check.addEventListener('change',()=>syncCard(card)); syncCard(card);
+    });
+    document.querySelectorAll('.schedule-preset').forEach(btn=>btn.addEventListener('click',()=>{
+      const preset=btn.dataset.preset;
+      form.querySelectorAll('[data-schedule-day]').forEach(card=>{
+        const day=Number(card.dataset.scheduleDay), check=card.querySelector('input[type="checkbox"]');
+        check.checked=(preset==='daily')||(preset==='6x1'&&day<6)||(preset==='5x2'&&day<5);
+        syncCard(card);
+      });
+    }));
+  }
+  const kind=document.getElementById('exceptionKind'), times=document.getElementById('exceptionTimes');
+  if(kind&&times){const sync=()=>{times.hidden=!['duty','temporary_shift'].includes(kind.value)};kind.addEventListener('change',sync);sync();}
+})();
+</script>
+{% endblock %}

@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 TRANSLATIONS = {
     'ru': {
-        'dashboard':'Дашборд','tickets':'Заявки','notifications':'Уведомления','team_schedule':'График техников',
+        'dashboard':'Дашборд','tickets':'Заявки','notifications':'Уведомления','team_schedule':'Графики сотрудников',
         'teams':'Группы исполнителей','sites':'Объекты','equipment':'Оборудование / CMDB','data_import':'Импорт данных',
         'maintenance':'ТО / ППР','inventory':'Склад / ЗИП','contractors':'Подрядчики','services':'Каталог сервисов',
         'knowledge':'База знаний','templates':'Шаблоны / Наряды','automation':'Автоматизация','categories':'Классификаторы',
@@ -15,7 +15,7 @@ TRANSLATIONS = {
         'profile':'Профиль','logout':'Выйти','install':'Установить приложение'
     },
     'kk': {
-        'dashboard':'Бақылау тақтасы','tickets':'Өтінімдер','notifications':'Хабарламалар','team_schedule':'Техниктер кестесі',
+        'dashboard':'Бақылау тақтасы','tickets':'Өтінімдер','notifications':'Хабарламалар','team_schedule':'Қызметкерлер кестесі',
         'teams':'Орындаушылар топтары','sites':'Нысандар','equipment':'Жабдық / CMDB','data_import':'Деректерді импорттау',
         'maintenance':'ТҚК / ЖЖЖ','inventory':'Қойма / ҚБ','contractors':'Мердігерлер','services':'Қызметтер каталогы',
         'knowledge':'Білім базасы','templates':'Үлгілер / Нарядтар','automation':'Автоматтандыру','categories':'Жіктеуіштер',
@@ -26,7 +26,7 @@ TRANSLATIONS = {
         'profile':'Профиль','logout':'Шығу','install':'Қосымшаны орнату'
     },
     'en': {
-        'dashboard':'Dashboard','tickets':'Tickets','notifications':'Notifications','team_schedule':'Technician schedule',
+        'dashboard':'Dashboard','tickets':'Tickets','notifications':'Notifications','team_schedule':'Staff schedules',
         'teams':'Support groups','sites':'Sites','equipment':'Equipment / CMDB','data_import':'Data import',
         'maintenance':'Maintenance / PPM','inventory':'Inventory / Spares','contractors':'Contractors','services':'Service catalog',
         'knowledge':'Knowledge base','templates':'Templates / Work orders','automation':'Automation','categories':'Classifiers',

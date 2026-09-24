@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.config import get_settings
-from app.models import AutomationRule, Ticket, User, SlaEvent, TechnicianAvailability, ServiceCatalog
+from app.models import AutomationRule, Ticket, User, SlaEvent, TechnicianAvailability, TechnicianAvailabilityException, ServiceCatalog
 from app.services.notifications import notify_user, notify_role
 from app.services.operations import pick_group_assignee, sync_group_observers
 from app.services.sla_calendar import apply_service_sla
@@ -18,10 +18,26 @@ def _safe_json(value:str, default):
     except Exception: return default
 
 def technician_available(db:Session, user_id:int, when:datetime|None=None)->bool:
+    """Return whether a technician can receive an automatic assignment.
+
+    A date-specific exception has priority over the regular weekly schedule.
+    Existing installations without an individual schedule use the FMTS default:
+    Monday-Friday 09:00-18:00, weekends off.
+    """
     when=when or datetime.now(); weekday=when.weekday(); hhmm=when.strftime('%H:%M')
+    exception=(db.query(TechnicianAvailabilityException)
+        .filter(TechnicianAvailabilityException.user_id==user_id, TechnicianAvailabilityException.exception_date==when.date())
+        .order_by(TechnicianAvailabilityException.id.desc()).first())
+    if exception is not None:
+        if not exception.available:
+            return False
+        return exception.start_time<=hhmm<=exception.end_time
+
     rows=db.query(TechnicianAvailability).filter(TechnicianAvailability.user_id==user_id,TechnicianAvailability.weekday==weekday).all()
-    if not rows: return True
-    return any(r.available and r.start_time<=hhmm<=r.end_time for r in rows)
+    if rows:
+        return any(r.available and r.start_time<=hhmm<=r.end_time for r in rows)
+    # No custom row for this weekday: use a predictable standard work week.
+    return weekday < 5 and '09:00' <= hhmm <= '18:00'
 
 def least_loaded_technician(db:Session)->User|None:
     techs=db.query(User).filter(User.role=='technician',User.active==True).all()
