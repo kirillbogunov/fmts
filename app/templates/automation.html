@@ -1,5 +1,165 @@
-{% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">WORKFLOW ENGINE</div><h1>Автоматизация</h1><p>Автоназначение, приоритеты, SLA и эскалации.</p></div></div>
-<section class="panel"><table class="responsive-table"><thead><tr><th>Правило</th><th>Условия</th><th>Действия</th><th>Статус</th></tr></thead><tbody>{% for r in rows %}<tr><td data-label="Правило"><b>{{r.name}}</b></td><td data-label="Условия"><code>{{r.conditions_json}}</code></td><td data-label="Действия"><code>{{r.actions_json}}</code></td><td data-label="Статус"><form method="post" action="/automation/{{r.id}}/toggle"><button class="btn">{% if r.active %}● Включено{% else %}○ Выключено{% endif %}</button></form></td></tr>{% else %}<tr><td colspan="4">Правил пока нет.</td></tr>{% endfor %}</tbody></table></section>
-<section class="panel"><h2>Новое правило</h2><form class="form" method="post" action="/automation/new"><label>Название<input name="name" required placeholder="Холодильники — срочно и автоназначение"></label><div class="form-grid"><label>Категория<input name="category"></label><label>Приоритет<select name="priority"><option value="">Любой</option><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option></select></label><label>Объект<select name="site_id"><option value="">Любой</option>{% for x in sites %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label><label>Заголовок содержит<input name="title_contains"></label><label>Установить приоритет<select name="set_priority"><option value="">Не менять</option><option value="high">Высокий</option><option value="critical">Срочный</option></select></label><label>SLA, часов<input type="number" step="0.5" name="sla_hours"></label><label>Назначить техника<select name="assign_user_id"><option value="">Не назначать конкретного</option>{% for x in technicians %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label></div><label class="inline-check"><input type="checkbox" name="assign_least_loaded" value="1"> назначить наименее загруженного доступного техника</label><label class="inline-check"><input type="checkbox" name="notify_manager" value="1"> уведомить руководителя</label><button class="btn primary">Создать правило</button></form></section>
+{% extends "base.html" %}
+{% block title %}Автоматизация — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead automation-pagehead">
+  <div>
+    <div class="eyebrow">WORKFLOW ENGINE</div>
+    <h1>Автоматизация</h1>
+    <p>FMTS сам разбирает новую заявку и выполняет нужные действия. Настройка строится по простой логике <b>«ЕСЛИ → ТО»</b>.</p>
+  </div>
+  <div class="pagehead-actions"><a class="btn" href="/services">Каталог сервисов / SLA</a><a class="btn primary" href="#automation-builder">＋ Новое правило</a></div>
+</div>
+
+{% if request.query_params.get('error') %}<div class="alert danger">{{ request.query_params.get('error') }}</div>{% endif %}
+{% if request.query_params.get('created') %}<div class="alert success">Правило создано и сразу готово к работе.</div>{% endif %}
+
+<section class="panel automation-explainer">
+  <div class="automation-explainer-copy">
+    <span class="step-pill">Как это работает</span>
+    <h2>Диспетчер задаёт только условие и результат</h2>
+    <p>Например: <b>если заявка про холодильник</b> → поставить высокий приоритет, выбрать свободного техника и уведомить руководителя.</p>
+  </div>
+  <div class="automation-flow-demo" aria-label="Пример правила автоматизации">
+    <div class="automation-flow-node if-node"><span>ЕСЛИ</span><b>Холодильник не охлаждает</b><small>условие заявки</small></div>
+    <div class="automation-flow-arrow">→</div>
+    <div class="automation-flow-node then-node"><span>ТО</span><b>Высокий приоритет + автоназначение</b><small>действия FMTS</small></div>
+  </div>
+  <div class="automation-quick-stats">
+    <div><span>Всего правил</span><b>{{ rows|length }}</b></div>
+    <div><span>Активных</span><b>{{ rows|selectattr('active')|list|length }}</b></div>
+  </div>
+</section>
+
+<section class="panel automation-presets-panel">
+  <div class="panelhead"><div><h2>Готовые сценарии</h2><p class="muted">Нажмите на подходящий вариант — FMTS заполнит основу правила, останется только проверить поля.</p></div></div>
+  <div class="automation-presets">
+    <button type="button" class="automation-preset" data-preset="cold"><span class="preset-icon">❄</span><b>Холодильное оборудование</b><small>Высокий приоритет и свободный техник</small></button>
+    <button type="button" class="automation-preset" data-preset="electric"><span class="preset-icon">⚡</span><b>Электрика</b><small>Категория → автоматическое назначение</small></button>
+    <button type="button" class="automation-preset" data-preset="critical"><span class="preset-icon">!</span><b>Критическое оборудование</b><small>Срочно + руководителю</small></button>
+    <button type="button" class="automation-preset" data-preset="leak"><span class="preset-icon">◉</span><b>Протечка / авария</b><small>Срочно + свободный техник</small></button>
+    <button type="button" class="automation-preset" data-preset="site"><span class="preset-icon">⌂</span><b>Распределение по объекту</b><small>Выберите магазин и исполнителя</small></button>
+    <button type="button" class="automation-preset" data-preset="urgent"><span class="preset-icon">↗</span><b>Срочные → руководителю</b><small>Эскалация всех срочных заявок</small></button>
+  </div>
+</section>
+
+<section class="automation-rules-section">
+  <div class="section-title-row"><div><h2>Действующие правила</h2><p>Правила проверяются сверху вниз при создании заявки.</p></div><span class="badge">{{ rows|length }}</span></div>
+  <div class="automation-rule-grid">
+    {% for card in cards %}{% set r=card.row %}{% set c=card.conditions %}{% set a=card.actions %}
+    <article class="automation-rule-card {% if not r.active %}is-disabled{% endif %}">
+      <div class="automation-rule-head">
+        <div class="automation-rule-index">{{ loop.index }}</div>
+        <div class="automation-rule-title"><h3>{{ r.name }}</h3><span>{% if r.active %}<i class="status-dot live"></i> Активно{% else %}<i class="status-dot"></i> Выключено{% endif %}</span></div>
+        <form method="post" action="/automation/{{r.id}}/toggle"><button class="automation-toggle {% if r.active %}on{% endif %}" type="submit" aria-label="{% if r.active %}Выключить{% else %}Включить{% endif %} правило"><span></span></button></form>
+      </div>
+      <div class="automation-rule-flow">
+        <div class="rule-side condition-side">
+          <div class="rule-side-label"><span>ЕСЛИ</span><small>все указанные условия совпали</small></div>
+          <div class="rule-chips">
+            {% if c.category %}<span>Категория: <b>{{c.category}}</b></span>{% endif %}
+            {% if c.priority %}<span>Приоритет: <b>{{priority_labels.get(c.priority,c.priority)}}</b></span>{% endif %}
+            {% if c.site_id %}<span>Объект: <b>{{site_map.get(c.site_id|int,'#' ~ c.site_id)}}</b></span>{% endif %}
+            {% if c.service_id %}<span>Сервис: <b>{{service_map.get(c.service_id|int,'#' ~ c.service_id)}}</b></span>{% endif %}
+            {% if c.equipment_category %}<span>Оборудование: <b>{{c.equipment_category}}</b></span>{% endif %}
+            {% if c.equipment_criticality %}<span>Критичность: <b>{{criticality_labels.get(c.equipment_criticality,c.equipment_criticality)}}</b></span>{% endif %}
+            {% if c.title_contains %}<span>Название содержит: <b>«{{c.title_contains}}»</b></span>{% endif %}
+            {% if not c %}<span class="muted-chip">Без условий</span>{% endif %}
+          </div>
+        </div>
+        <div class="rule-flow-arrow">→</div>
+        <div class="rule-side action-side">
+          <div class="rule-side-label"><span>ТО</span><small>FMTS выполнит действия</small></div>
+          <div class="rule-chips actions">
+            {% if a.set_priority %}<span>Приоритет → <b>{{priority_labels.get(a.set_priority,a.set_priority)}}</b></span>{% endif %}
+            {% if a.set_category %}<span>Категория → <b>{{a.set_category}}</b></span>{% endif %}
+            {% if a.apply_service_id %}<span>SLA → <b>{{service_map.get(a.apply_service_id|int,'Сервис #' ~ a.apply_service_id)}}</b></span>{% elif a.sla_hours %}<span>Legacy SLA → <b>{{a.sla_hours}} ч.</b></span>{% endif %}
+            {% if a.assign_user_id %}<span>Исполнитель → <b>{{tech_map.get(a.assign_user_id|int,'#' ~ a.assign_user_id)}}</b></span>{% elif a.assign_group_id %}<span>Группа → <b>{{group_map.get(a.assign_group_id|int,'#' ~ a.assign_group_id)}}</b></span>{% elif a.assign_least_loaded %}<span><b>Наименее загруженный техник</b></span>{% endif %}
+            {% if a.notify_manager %}<span><b>Уведомить руководителя</b></span>{% endif %}
+            {% if not a %}<span class="muted-chip">Нет действий</span>{% endif %}
+          </div>
+        </div>
+      </div>
+      <div class="automation-rule-footer"><small>Создано {{fmt_dt(r.created_at,'%d.%m.%Y %H:%M')}}</small><form method="post" action="/automation/{{r.id}}/delete" onsubmit="return confirm('Удалить правило «{{r.name}}»?')"><button type="submit" class="btn danger-soft compact">Удалить</button></form></div>
+    </article>
+    {% else %}
+    <div class="empty-automation-state"><div>⚡</div><h3>Автоматизаций пока нет</h3><p>Выберите готовый сценарий выше или создайте первое правило вручную.</p><a class="btn primary" href="#automation-builder">Создать первое правило</a></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel automation-builder" id="automation-builder">
+  <div class="panelhead automation-builder-head"><div><span class="step-pill">Конструктор правила</span><h2>Новое правило</h2><p class="muted">Пустое поле означает «не учитывать». Все заполненные условия должны совпасть одновременно.</p></div><div class="builder-progress"><span class="active">1</span><i></i><span>2</span></div></div>
+  <form method="post" action="/automation/new" id="automationForm" class="automation-form">
+    <label class="automation-name-field"><span>Название правила</span><input name="name" id="ruleName" required placeholder="Например: Авария холодильного оборудования"><small>Название увидит диспетчер в списке правил и журнале.</small></label>
+
+    <div class="automation-builder-grid">
+      <section class="automation-builder-stage condition-stage">
+        <div class="stage-heading"><div class="stage-number">1</div><div><span>ЕСЛИ</span><h3>Когда срабатывать?</h3><p>Выберите только те признаки заявки, которые действительно важны.</p></div></div>
+        <div class="stage-fields">
+          <label><span>Категория заявки</span><input name="category" id="conditionCategory" list="ticketCategoryList" placeholder="Любая категория"><small>Например: Электрика или Холодильное оборудование</small></label>
+          <datalist id="ticketCategoryList">{% for x in ticket_categories %}<option value="{{x.code}}">{{x.name}}</option>{% endfor %}</datalist>
+          <label><span>Объект</span><select name="site_id" id="conditionSite"><option value="">Любой объект</option>{% for x in sites %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label>
+          <label><span>Исходный приоритет</span><select name="priority" id="conditionPriority"><option value="">Любой</option><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option></select></label>
+          <label><span>Сервис</span><select name="service_id" id="conditionService"><option value="">Любой сервис</option>{% for x in services %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label>
+          <label><span>Категория оборудования</span><input name="equipment_category" id="conditionEquipment" list="equipmentCategoryList" placeholder="Любая"><small>Проверяется только у заявок, связанных с оборудованием.</small></label>
+          <datalist id="equipmentCategoryList">{% for x in equipment_categories %}<option value="{{x}}">{% endfor %}</datalist>
+          <label><span>Критичность оборудования</span><select name="equipment_criticality" id="conditionCriticality"><option value="">Любая</option><option value="low">Низкая</option><option value="normal">Обычная</option><option value="high">Высокая</option><option value="critical">Критическая</option></select></label>
+          <label class="span-2"><span>Название заявки содержит</span><input name="title_contains" id="conditionTitle" placeholder="Например: протечка"><small>Можно указать часть слова: «холод», «протеч», «искрит».</small></label>
+        </div>
+      </section>
+
+      <div class="automation-builder-arrow">→</div>
+
+      <section class="automation-builder-stage action-stage">
+        <div class="stage-heading"><div class="stage-number">2</div><div><span>ТО</span><h3>Что сделать автоматически?</h3><p>Можно выполнить сразу несколько действий.</p></div></div>
+        <div class="stage-fields">
+          <label><span>Изменить приоритет</span><select name="set_priority" id="actionPriority"><option value="">Не менять</option><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option></select></label>
+          <label><span>Изменить категорию</span><input name="set_category" id="actionCategory" list="ticketCategoryList" placeholder="Не менять"></label>
+          <label class="span-2 sla-profile-field"><span>Применить SLA-профиль / сервис</span><select name="apply_service_id" id="actionService"><option value="">Не менять SLA</option>{% for x in services %}<option value="{{x.id}}">{{x.name}}{% if x.response_sla_minutes or x.resolution_sla_minutes or x.default_sla_hours %} · реакция {{x.response_sla_minutes or '—'}} мин · решение {{x.resolution_sla_minutes or (x.default_sla_hours*60 if x.default_sla_hours else '—')}} мин{% endif %}</option>{% endfor %}</select><small>Рекомендуемый способ: SLA берётся из каталога сервисов и рабочего календаря.</small></label>
+
+          <div class="assignment-card span-2">
+            <div class="assignment-card-head"><div><b>Автоназначение</b><small>Кому передать заявку после создания</small></div></div>
+            <div class="assignment-mode-grid">
+              <label class="assignment-mode"><input type="radio" name="assignment_mode" value="none" checked><span><b>Не назначать</b><small>Оставить диспетчеру</small></span></label>
+              <label class="assignment-mode"><input type="radio" name="assignment_mode" value="least"><span><b>Свободный техник</b><small>Минимальная текущая загрузка</small></span></label>
+              <label class="assignment-mode"><input type="radio" name="assignment_mode" value="group"><span><b>Из группы</b><small>Свободный техник выбранной команды</small></span></label>
+              <label class="assignment-mode"><input type="radio" name="assignment_mode" value="user"><span><b>Конкретный</b><small>Всегда один специалист</small></span></label>
+            </div>
+            <input type="hidden" name="assign_least_loaded" id="assignLeast" value="">
+            <div class="assignment-dependent" id="groupSelectWrap" hidden><label><span>Группа исполнителей</span><select name="assign_group_id" id="assignGroup"><option value="">Выберите группу</option>{% for g in groups %}<option value="{{g.id}}">{{g.name}}</option>{% endfor %}</select></label></div>
+            <div class="assignment-dependent" id="userSelectWrap" hidden><label><span>Техник</span><select name="assign_user_id" id="assignUser"><option value="">Выберите техника</option>{% for x in technicians %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label></div>
+          </div>
+
+          <label class="automation-switch-row span-2"><input type="checkbox" name="notify_manager" value="1" id="notifyManager"><span class="switch-ui"></span><span><b>Уведомить руководителя</b><small>Руководитель и администратор получат уведомление об автоматически обработанной заявке.</small></span></label>
+        </div>
+
+        <details class="automation-advanced span-2"><summary>Дополнительные настройки совместимости</summary><div><label><span>Legacy SLA, часов</span><input type="number" step="0.5" min="0.5" name="sla_hours" placeholder="Не использовать"><small>Оставлено только для старых сценариев. Для новых правил лучше выбрать SLA-профиль сервиса выше.</small></label></div></details>
+      </section>
+    </div>
+    <div class="automation-form-footer"><div class="automation-preview" id="automationPreview"><span>Предпросмотр</span><b>Заполните условие и действие</b><small>Здесь появится краткое описание правила.</small></div><button class="btn primary large" type="submit">Создать правило</button></div>
+  </form>
+</section>
+
+<script>
+(function(){
+  const form=document.getElementById('automationForm'); if(!form) return;
+  const q=(id)=>document.getElementById(id);
+  const modes=[...document.querySelectorAll('input[name="assignment_mode"]')];
+  function assignment(){const mode=(modes.find(x=>x.checked)||{}).value||'none';q('assignLeast').value=mode==='least'?'1':'';q('groupSelectWrap').hidden=mode!=='group';q('userSelectWrap').hidden=mode!=='user';if(mode!=='group')q('assignGroup').value='';if(mode!=='user')q('assignUser').value='';document.querySelectorAll('.assignment-mode').forEach(x=>x.classList.toggle('selected',x.querySelector('input').checked));preview();}
+  modes.forEach(x=>x.addEventListener('change',assignment));
+  const presets={
+    cold:{name:'Авария холодильного оборудования',title:'холод',setPriority:'high',mode:'least',notify:true},
+    electric:{name:'Электрика — автоназначение',category:'Электрика',mode:'least'},
+    critical:{name:'Критическое оборудование — срочно',criticality:'critical',setPriority:'critical',mode:'least',notify:true},
+    leak:{name:'Протечка / аварийная сантехника',title:'протеч',setPriority:'critical',mode:'least',notify:true},
+    site:{name:'Распределение заявок по объекту',mode:'least',focus:'conditionSite'},
+    urgent:{name:'Срочные заявки → руководителю',priority:'critical',notify:true}
+  };
+  function resetBuilder(){['conditionCategory','conditionSite','conditionPriority','conditionService','conditionEquipment','conditionCriticality','conditionTitle','actionPriority','actionCategory','actionService','assignGroup','assignUser'].forEach(id=>{if(q(id))q(id).value='';});q('notifyManager').checked=false;modes[0].checked=true;assignment();}
+  document.querySelectorAll('.automation-preset').forEach(btn=>btn.addEventListener('click',()=>{const p=presets[btn.dataset.preset];if(!p)return;resetBuilder();q('ruleName').value=p.name||'';q('conditionCategory').value=p.category||'';q('conditionPriority').value=p.priority||'';q('conditionCriticality').value=p.criticality||'';q('conditionTitle').value=p.title||'';q('actionPriority').value=p.setPriority||'';q('notifyManager').checked=!!p.notify;const radio=modes.find(x=>x.value===(p.mode||'none'));if(radio)radio.checked=true;assignment();document.getElementById('automation-builder').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{if(p.focus&&q(p.focus))q(p.focus).focus();else q('ruleName').focus();},450);preview();}));
+  function textOf(select){return select&&select.value?select.options[select.selectedIndex].text:'';}
+  function preview(){const conditions=[];const actions=[];if(q('conditionCategory').value)conditions.push('категория «'+q('conditionCategory').value+'»');if(q('conditionSite').value)conditions.push('объект «'+textOf(q('conditionSite'))+'»');if(q('conditionPriority').value)conditions.push('приоритет «'+textOf(q('conditionPriority'))+'»');if(q('conditionCriticality').value)conditions.push('критичность «'+textOf(q('conditionCriticality'))+'»');if(q('conditionTitle').value)conditions.push('название содержит «'+q('conditionTitle').value+'»');if(q('actionPriority').value)actions.push('приоритет → '+textOf(q('actionPriority')));if(q('actionService').value)actions.push('SLA → '+textOf(q('actionService')).split(' · ')[0]);const mode=(modes.find(x=>x.checked)||{}).value;if(mode==='least')actions.push('назначить свободного техника');if(mode==='group'&&q('assignGroup').value)actions.push('назначить из группы «'+textOf(q('assignGroup'))+'»');if(mode==='user'&&q('assignUser').value)actions.push('назначить «'+textOf(q('assignUser'))+'»');if(q('notifyManager').checked)actions.push('уведомить руководителя');const box=q('automationPreview');const b=box.querySelector('b'),sm=box.querySelector('small');b.textContent=conditions.length?'ЕСЛИ '+conditions.join(' + '):'Добавьте хотя бы одно условие';sm.textContent=actions.length?'ТО '+actions.join(' · '):'Добавьте хотя бы одно действие';box.classList.toggle('ready',conditions.length>0&&actions.length>0);}
+  form.querySelectorAll('input,select').forEach(x=>x.addEventListener('input',preview));assignment();preview();
+})();
+</script>
 {% endblock %}

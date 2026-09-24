@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.config import get_settings
-from app.models import AutomationRule, Ticket, User, SlaEvent, TechnicianAvailability
+from app.models import AutomationRule, Ticket, User, SlaEvent, TechnicianAvailability, ServiceCatalog
 from app.services.notifications import notify_user, notify_role
+from app.services.operations import pick_group_assignee, sync_group_observers
+from app.services.sla_calendar import apply_service_sla
 
 settings=get_settings()
 OPEN={'new','assigned','in_progress','waiting'}
@@ -36,6 +38,7 @@ def rule_matches(rule:AutomationRule,ticket:Ticket)->bool:
     if c.get('service_id') and ticket.service_id!=int(c['service_id']): return False
     if c.get('title_contains') and c['title_contains'].lower() not in (ticket.title or '').lower(): return False
     if c.get('equipment_category') and (not ticket.equipment or ticket.equipment.category!=c['equipment_category']): return False
+    if c.get('equipment_criticality') and (not ticket.equipment or ticket.equipment.criticality!=c['equipment_criticality']): return False
     return True
 
 def apply_ticket_rules(db:Session,ticket:Ticket)->list[str]:
@@ -45,15 +48,31 @@ def apply_ticket_rules(db:Session,ticket:Ticket)->list[str]:
         a=_safe_json(rule.actions_json,{})
         if a.get('set_priority'): ticket.priority=str(a['set_priority'])
         if a.get('set_category'): ticket.category=str(a['set_category'])
-        if a.get('sla_hours'):
+        if a.get('apply_service_id'):
+            service=db.get(ServiceCatalog,int(a['apply_service_id']))
+            if service and service.active:
+                ticket.service_id=service.id
+                apply_service_sla(db,ticket,service,start_at=ticket.created_at or datetime.utcnow())
+        elif a.get('sla_hours'):
+            # Legacy rule compatibility: older rules may still store a raw hour value.
             try: ticket.sla_due_at=datetime.utcnow()+timedelta(hours=float(a['sla_hours']))
             except Exception: pass
+        if a.get('assign_group_id'):
+            try:
+                ticket.group_id=int(a['assign_group_id'])
+            except Exception:
+                ticket.group_id=None
         if a.get('assign_user_id'):
             u=db.get(User,int(a['assign_user_id']))
             if u and u.active and u.role=='technician': ticket.assignee_id=u.id; ticket.master_name=u.full_name; ticket.status='assigned'
+        elif a.get('assign_group_id'):
+            u=pick_group_assignee(db,int(a['assign_group_id']))
+            if u: ticket.assignee_id=u.id; ticket.master_name=u.full_name; ticket.status='assigned'
         elif a.get('assign_least_loaded'):
             u=least_loaded_technician(db)
             if u: ticket.assignee_id=u.id; ticket.master_name=u.full_name; ticket.status='assigned'
+        if ticket.group_id:
+            sync_group_observers(db,ticket)
         if a.get('notify_manager'):
             notify_role(db,{'manager','admin'},f'Автоматизация: {ticket.number}',rule.name,f'/tickets/{ticket.id}',dedup_prefix=f'rule:{rule.id}:ticket:{ticket.id}')
         applied.append(rule.name)

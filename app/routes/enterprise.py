@@ -12,7 +12,7 @@ from app.db import get_db
 from app.config import get_settings
 from app.models import (User, Site, Equipment, Ticket, ServiceCatalog, CustomField, TicketCustomValue,
     KnowledgeArticle, KnowledgeAttachment, AutomationRule, Notification, PushSubscription, TicketLink, ApprovalRequest,
-    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, BusinessCalendar)
+    TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, BusinessCalendar, SupportGroup)
 from app.security import current_user, generate_totp_secret, verify_totp, totp_uri
 from app.access import has_permission, can_view_ticket, scope_ticket_query
 from app.routes.web import ctx, templates, forbidden
@@ -220,17 +220,44 @@ def automation_page(request:Request,db:Session=Depends(get_db)):
     denied=_require(request,db,u,'automation.manage')
     if denied:return denied
     rows=db.query(AutomationRule).order_by(AutomationRule.sort_order,AutomationRule.id).all()
-    return templates.TemplateResponse('automation.html',ctx(request,db,rows=rows,sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=='technician',User.active==True).all()))
+    cards=[{'row':r,'conditions':_json(r.conditions_json,{}),'actions':_json(r.actions_json,{})} for r in rows]
+    sites=db.query(Site).order_by(Site.name).all()
+    technicians=db.query(User).filter(User.role=='technician',User.active==True).order_by(User.full_name).all()
+    services=db.query(ServiceCatalog).filter(ServiceCatalog.active==True).order_by(ServiceCatalog.name).all()
+    groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all()
+    equipment_categories=[x[0] for x in db.query(Equipment.category).filter(Equipment.category!='').distinct().order_by(Equipment.category).all() if x[0]]
+    return templates.TemplateResponse('automation.html',ctx(request,db,cards=cards,rows=rows,sites=sites,technicians=technicians,services=services,groups=groups,equipment_categories=equipment_categories,ticket_categories=category_options(db,'ticket'),site_map={x.id:x.name for x in sites},tech_map={x.id:x.full_name for x in technicians},service_map={x.id:x.name for x in services},group_map={x.id:x.name for x in groups}))
 
 @router.post('/automation/new')
-def automation_new(request:Request,name:str=Form(...),category:str=Form(''),priority:str=Form(''),site_id:str=Form(''),title_contains:str=Form(''),set_priority:str=Form(''),sla_hours:str=Form(''),assign_user_id:str=Form(''),assign_least_loaded:str=Form(''),notify_manager:str=Form(''),db:Session=Depends(get_db)):
+def automation_new(request:Request,name:str=Form(...),category:str=Form(''),priority:str=Form(''),site_id:str=Form(''),service_id:str=Form(''),equipment_category:str=Form(''),equipment_criticality:str=Form(''),title_contains:str=Form(''),set_priority:str=Form(''),set_category:str=Form(''),apply_service_id:str=Form(''),assign_group_id:str=Form(''),assign_user_id:str=Form(''),assign_least_loaded:str=Form(''),notify_manager:str=Form(''),sla_hours:str=Form(''),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
     if not has_permission(u,'automation.manage'):return forbidden(request,db,u,'automation.manage')
-    cond={k:v for k,v in {'category':category,'priority':priority,'site_id':int(site_id) if site_id else None,'title_contains':title_contains}.items() if v not in ('',None)}
-    act={k:v for k,v in {'set_priority':set_priority,'sla_hours':float(sla_hours) if sla_hours else None,'assign_user_id':int(assign_user_id) if assign_user_id else None,'assign_least_loaded':bool(assign_least_loaded),'notify_manager':bool(notify_manager)}.items() if v not in ('',None,False)}
-    db.add(AutomationRule(name=name,conditions_json=json.dumps(cond,ensure_ascii=False),actions_json=json.dumps(act,ensure_ascii=False)));db.commit()
-    return RedirectResponse('/automation',303)
+    cond={k:v for k,v in {
+        'category':category,
+        'priority':priority,
+        'site_id':int(site_id) if site_id else None,
+        'service_id':int(service_id) if service_id else None,
+        'equipment_category':equipment_category,
+        'equipment_criticality':equipment_criticality,
+        'title_contains':title_contains.strip(),
+    }.items() if v not in ('',None)}
+    act={k:v for k,v in {
+        'set_priority':set_priority,
+        'set_category':set_category,
+        'apply_service_id':int(apply_service_id) if apply_service_id else None,
+        'assign_group_id':int(assign_group_id) if assign_group_id else None,
+        'assign_user_id':int(assign_user_id) if assign_user_id else None,
+        'assign_least_loaded':bool(assign_least_loaded),
+        'notify_manager':bool(notify_manager),
+        # Legacy fallback. Kept for old installations and advanced compatibility.
+        'sla_hours':float(sla_hours) if sla_hours else None,
+    }.items() if v not in ('',None,False)}
+    if not cond or not act:
+        return RedirectResponse('/automation?error=Укажите+хотя+бы+одно+условие+и+одно+действие',303)
+    row=AutomationRule(name=name.strip(),conditions_json=json.dumps(cond,ensure_ascii=False),actions_json=json.dumps(act,ensure_ascii=False))
+    db.add(row);db.commit();audit(db,request,u,'automation.create',entity_type='automation_rule',entity_id=row.id,details=row.name)
+    return RedirectResponse('/automation?created=1',303)
 
 @router.post('/automation/{rule_id}/toggle')
 def automation_toggle(rule_id:int,request:Request,db:Session=Depends(get_db)):
@@ -238,7 +265,18 @@ def automation_toggle(rule_id:int,request:Request,db:Session=Depends(get_db)):
     if not u:return RedirectResponse('/login',303)
     if not has_permission(u,'automation.manage'):return forbidden(request,db,u,'automation.manage')
     row=db.get(AutomationRule,rule_id)
-    if row: row.active=not row.active;db.commit()
+    if row:
+        row.active=not row.active;db.commit();audit(db,request,u,'automation.toggle',entity_type='automation_rule',entity_id=row.id,details=f'active={row.active}')
+    return RedirectResponse('/automation',303)
+
+@router.post('/automation/{rule_id}/delete')
+def automation_delete(rule_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'automation.manage'):return forbidden(request,db,u,'automation.manage')
+    row=db.get(AutomationRule,rule_id)
+    if row:
+        name=row.name;db.delete(row);db.commit();audit(db,request,u,'automation.delete',entity_type='automation_rule',entity_id=rule_id,details=name)
     return RedirectResponse('/automation',303)
 
 # ---------- Search / saved filters ----------
