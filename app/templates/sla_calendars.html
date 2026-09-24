@@ -1,6 +1,203 @@
 {% extends "base.html" %}{% block title %}SLA-календари — {{app_name}}{% endblock %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">SERVICE DESK / SLA</div><h1>Рабочие календари SLA</h1><p>Срок реакции и решения считается только внутри рабочего времени выбранного календаря.</p></div><a class="btn" href="/services">Каталог сервисов</a></div>
-<div class="grid2 wide-left"><section class="panel"><h2>Календари</h2><div class="sla-calendar-list">{% for c in rows %}<form class="sla-calendar-card" method="post" action="/sla-calendars/{{c.id}}/update"><div class="panelhead"><div><b>{{c.name}}</b><small>{{c.timezone}} · {{c.work_start}}–{{c.work_end}}</small></div><span class="badge">{{'Активен' if c.active else 'Отключён'}}</span></div><div class="form-grid"><label>Название<input name="name" value="{{c.name}}" required></label><label>Часовой пояс<input name="timezone" value="{{c.timezone}}" required></label><label>Рабочие дни<input name="weekdays" value="{{c.weekdays}}"><small>0=Пн … 6=Вс</small></label><label>Начало<input type="time" name="work_start" value="{{c.work_start}}"></label><label>Окончание<input type="time" name="work_end" value="{{c.work_end}}"></label><label>Праздники / выходные<textarea name="holidays" rows="3" placeholder="2026-01-01\n2026-03-08">{{calendar_holidays.get(c.id,'')}}</textarea></label></div><label class="inline-check"><input type="checkbox" name="active" value="1" {% if c.active %}checked{% endif %}> активен</label><button class="btn">Сохранить</button></form>{% else %}<p class="muted">Календарей пока нет.</p>{% endfor %}</div></section>
-<section class="panel"><h2>Новый календарь</h2><form class="form" method="post" action="/sla-calendars/new"><label>Название<input name="name" required placeholder="Пятидневка 09:00–18:00"></label><label>Часовой пояс<input name="timezone" value="Asia/Almaty"></label><label>Рабочие дни<input name="weekdays" value="0,1,2,3,4"><small>0=понедельник, 6=воскресенье</small></label><div class="form-grid"><label>Начало<input type="time" name="work_start" value="09:00"></label><label>Окончание<input type="time" name="work_end" value="18:00"></label></div><label>Праздники / выходные<textarea name="holidays" rows="6" placeholder="2026-01-01\n2026-01-02"></textarea></label><button class="btn primary">Создать календарь</button></form><div class="sla-hint"><b>Пример:</b><p>Если заявка создана в пятницу в 17:30 и SLA решения = 120 минут, при графике Пн–Пт 09:00–18:00 дедлайн переносится на понедельник 10:30.</p></div></section></div>
-<section class="panel"><div class="panelhead"><div><h2>SLA сервисов</h2><p class="muted">Реакция и решение в рабочих минутах.</p></div></div><table class="responsive-table"><thead><tr><th>Сервис</th><th>Календарь</th><th>Реакция</th><th>Решение</th></tr></thead><tbody>{% for s in services %}<tr><td><a href="/services"><b>{{s.name}}</b></a></td><td>{{s.business_calendar.name if s.business_calendar else '24/7 / fallback'}}</td><td>{{s.response_sla_minutes or '—'}}{% if s.response_sla_minutes %} мин{% endif %}</td><td>{{s.resolution_sla_minutes or (s.default_sla_hours*60 if s.default_sla_hours else '—')}}{% if s.resolution_sla_minutes or s.default_sla_hours %} мин{% endif %}</td></tr>{% else %}<tr><td colspan="4" class="empty-row">Сервисов пока нет.</td></tr>{% endfor %}</tbody></table></section>
+<div class="pagehead sla-pagehead">
+  <div>
+    <div class="eyebrow">SERVICE DESK / SLA</div>
+    <h1>Рабочие календари SLA</h1>
+    <p>Настройте рабочие дни и часы понятным способом — без кодов вроде «0,1,2,3,4». FMTS сам использует календарь для расчёта реакции и решения.</p>
+  </div>
+  <div class="pagehead-actions"><a class="btn" href="/services">Каталог сервисов</a></div>
+</div>
+
+<section class="panel sla-explainer">
+  <div class="sla-explainer-icon">◴</div>
+  <div>
+    <b>Как это работает</b>
+    <p>Вы отмечаете рабочие дни, задаёте время начала и окончания смены и при необходимости добавляете исключения. Всё остальное FMTS рассчитывает автоматически.</p>
+  </div>
+  <div class="sla-explainer-example"><span>Пример</span><b>Пн–Пт · 09:00–18:00</b><small>Заявка в пятницу 17:30 + SLA 120 мин → понедельник 10:30</small></div>
+</section>
+
+<div class="sla-layout-modern">
+  <section class="panel sla-create-card">
+    <div class="panelhead panelhead-tight">
+      <div>
+        <div class="step-pill">Новый календарь</div>
+        <h2>Создать рабочий график</h2>
+        <p class="muted">Три коротких шага: название, рабочая неделя, исключения.</p>
+      </div>
+    </div>
+
+    <form class="sla-builder" method="post" action="/sla-calendars/new" data-sla-form>
+      <div class="sla-builder-step">
+        <div class="sla-step-number">1</div>
+        <div class="sla-step-content">
+          <h3>Название и часовой пояс</h3>
+          <div class="sla-two-col">
+            <label>Название календаря<input name="name" required placeholder="Например: Основной график"></label>
+            <label>Часовой пояс
+              <select name="timezone" class="sla-timezone-select">
+                {% for zone in supported_timezones %}<option value="{{zone}}" {% if (user.timezone or 'Asia/Almaty')==zone %}selected{% endif %}>{% if zone=='Asia/Almaty' %}Казахстан · UTC+5{% elif zone=='Asia/Qostanay' %}Костанай / Северный Казахстан · UTC+5{% elif zone=='Asia/Aqtobe' %}Актобе · UTC+5{% elif zone=='Asia/Aqtau' %}Актау · UTC+5{% elif zone=='Asia/Atyrau' %}Атырау · UTC+5{% elif zone=='Asia/Oral' %}Уральск · UTC+5{% elif zone=='Asia/Qyzylorda' %}Кызылорда · UTC+5{% elif zone=='Europe/Moscow' %}Москва · UTC+3{% elif zone=='Asia/Yekaterinburg' %}Екатеринбург · UTC+5{% elif zone=='Asia/Omsk' %}Омск · UTC+6{% elif zone=='Asia/Novosibirsk' %}Новосибирск · UTC+7{% elif zone=='UTC' %}UTC{% else %}{{zone}}{% endif %}</option>{% endfor %}
+              </select>
+              <small class="field-hint">Для Петропавловска подходит «Казахстан · UTC+5».</small>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="sla-builder-step">
+        <div class="sla-step-number">2</div>
+        <div class="sla-step-content">
+          <h3>Рабочая неделя</h3>
+          <div class="sla-presets">
+            <button class="sla-preset active" type="button" data-preset="five">5/2</button>
+            <button class="sla-preset" type="button" data-preset="six">6/1</button>
+            <button class="sla-preset" type="button" data-preset="all">Каждый день</button>
+          </div>
+          <input type="hidden" name="weekdays" value="0,1,2,3,4" data-weekdays-output>
+          <div class="sla-weekdays" data-weekdays>
+            {% set day_names=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] %}
+            {% for d in range(7) %}<label class="sla-day {% if d < 5 %}selected{% endif %}"><input type="checkbox" value="{{d}}" {% if d < 5 %}checked{% endif %}><span>{{day_names[d]}}</span></label>{% endfor %}
+          </div>
+          <div class="sla-worktime-row">
+            <label><span>Начало рабочего дня</span><input type="time" name="work_start" value="09:00"></label>
+            <div class="sla-time-arrow">→</div>
+            <label><span>Окончание рабочего дня</span><input type="time" name="work_end" value="18:00"></label>
+            <div class="sla-shift-preview"><span>Продолжительность</span><b data-shift-duration>9 ч.</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sla-builder-step">
+        <div class="sla-step-number">3</div>
+        <div class="sla-step-content">
+          <h3>Праздники и дополнительные выходные</h3>
+          <p class="muted">Добавляйте только исключения. Обычные суббота и воскресенье уже учитываются рабочей неделей.</p>
+          <input type="hidden" name="holidays" value="" data-holidays-output>
+          <div class="holiday-editor" data-holiday-editor>
+            <div class="holiday-add-row"><input type="date" data-holiday-date><button class="btn" type="button" data-add-holiday>＋ Добавить дату</button></div>
+            <div class="holiday-list" data-holiday-list><span class="holiday-empty">Исключений пока нет</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sla-builder-footer">
+        <div class="sla-builder-summary"><span>Итоговый график</span><b data-summary>Пн–Пт · 09:00–18:00</b></div>
+        <button class="btn primary" type="submit">Создать календарь</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel sla-existing-card">
+    <div class="panelhead panelhead-tight"><div><h2>Существующие календари</h2><p class="muted">Нажмите «Настроить», если нужно изменить график.</p></div><span class="badge">{{rows|length}}</span></div>
+    <div class="sla-calendar-list modern">
+      {% for c in rows %}
+      <article class="sla-calendar-summary-card {% if not c.active %}is-disabled{% endif %}">
+        <div class="sla-summary-top">
+          <div class="sla-calendar-icon">◷</div>
+          <div class="sla-summary-main">
+            <div class="sla-summary-title"><h3>{{c.name}}</h3><span class="badge {% if c.active %}soft-green{% else %}soft-red{% endif %}">{{'Активен' if c.active else 'Отключён'}}</span></div>
+            <div class="sla-summary-tags">
+              <span>{{c.work_start}}–{{c.work_end}}</span>
+              <span>{% if c.weekdays=='0,1,2,3,4' %}Пн–Пт{% elif c.weekdays=='0,1,2,3,4,5' %}Пн–Сб{% elif c.weekdays=='0,1,2,3,4,5,6' %}Каждый день{% else %}Индивидуальный график{% endif %}</span>
+              <span>{% if c.timezone in ['Asia/Almaty','Asia/Qostanay'] %}Казахстан · UTC+5{% else %}{{c.timezone}}{% endif %}</span>
+            </div>
+          </div>
+          <button class="btn compact" type="button" data-calendar-toggle="{{c.id}}">Настроить</button>
+        </div>
+
+        <form class="sla-calendar-edit" id="calendar-edit-{{c.id}}" method="post" action="/sla-calendars/{{c.id}}/update" data-sla-form hidden>
+          <div class="sla-edit-grid">
+            <label>Название<input name="name" value="{{c.name}}" required></label>
+            <label>Часовой пояс
+              <select name="timezone">
+                {% for zone in supported_timezones %}<option value="{{zone}}" {% if c.timezone==zone %}selected{% endif %}>{% if zone=='Asia/Almaty' %}Казахстан · UTC+5{% elif zone=='Asia/Qostanay' %}Костанай / Северный Казахстан · UTC+5{% elif zone=='Asia/Aqtobe' %}Актобе · UTC+5{% elif zone=='Asia/Aqtau' %}Актау · UTC+5{% elif zone=='Asia/Atyrau' %}Атырау · UTC+5{% elif zone=='Asia/Oral' %}Уральск · UTC+5{% elif zone=='Asia/Qyzylorda' %}Кызылорда · UTC+5{% elif zone=='Europe/Moscow' %}Москва · UTC+3{% elif zone=='Asia/Yekaterinburg' %}Екатеринбург · UTC+5{% elif zone=='Asia/Omsk' %}Омск · UTC+6{% elif zone=='Asia/Novosibirsk' %}Новосибирск · UTC+7{% elif zone=='UTC' %}UTC{% else %}{{zone}}{% endif %}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+
+          <input type="hidden" name="weekdays" value="{{c.weekdays}}" data-weekdays-output>
+          <div class="sla-weekdays compact-days" data-weekdays>
+            {% set day_names=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'] %}
+            {% for d in range(7) %}<label class="sla-day {% if d|string in c.weekdays %}selected{% endif %}"><input type="checkbox" value="{{d}}" {% if d|string in c.weekdays %}checked{% endif %}><span>{{day_names[d]}}</span></label>{% endfor %}
+          </div>
+
+          <div class="sla-worktime-row compact-worktime">
+            <label><span>С</span><input type="time" name="work_start" value="{{c.work_start}}"></label>
+            <div class="sla-time-arrow">→</div>
+            <label><span>До</span><input type="time" name="work_end" value="{{c.work_end}}"></label>
+            <div class="sla-shift-preview"><span>Смена</span><b data-shift-duration>—</b></div>
+          </div>
+
+          <div class="sla-edit-holidays">
+            <div><b>Дополнительные выходные</b><small>Праздники и исключения</small></div>
+            <input type="hidden" name="holidays" value="{{calendar_holidays.get(c.id,'')}}" data-holidays-output>
+            <div class="holiday-editor compact" data-holiday-editor>
+              <div class="holiday-add-row"><input type="date" data-holiday-date><button class="btn compact" type="button" data-add-holiday>＋ Дата</button></div>
+              <div class="holiday-list" data-holiday-list></div>
+            </div>
+          </div>
+
+          <div class="sla-edit-footer">
+            <label class="toggle-field mini-toggle"><span class="toggle-wrap"><input type="checkbox" name="active" value="1" {% if c.active %}checked{% endif %}><b>Календарь активен</b></span></label>
+            <div class="form-actions-inline"><button class="btn" type="button" data-calendar-toggle="{{c.id}}">Отмена</button><button class="btn primary" type="submit">Сохранить изменения</button></div>
+          </div>
+        </form>
+      </article>
+      {% else %}<div class="empty-state-soft"><b>Календарей пока нет</b><span>Создайте первый рабочий график слева — это займёт меньше минуты.</span></div>{% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="panel sla-services-panel">
+  <div class="panelhead"><div><h2>SLA сервисов</h2><p class="muted">Какие нормативы реакции и решения сейчас применяются к сервисам.</p></div></div>
+  <div class="sla-service-cards">
+    {% for s in services %}<div class="sla-service-card"><div><b>{{s.name}}</b><small>{{s.business_calendar.name if s.business_calendar else 'Календарь не назначен · fallback 24/7'}}</small></div><div class="sla-service-metrics"><span><small>Реакция</small><b>{{s.response_sla_minutes or '—'}}{% if s.response_sla_minutes %} мин{% endif %}</b></span><span><small>Решение</small><b>{{s.resolution_sla_minutes or (s.default_sla_hours*60 if s.default_sla_hours else '—')}}{% if s.resolution_sla_minutes or s.default_sla_hours %} мин{% endif %}</b></span></div></div>{% else %}<div class="empty-state-soft"><b>Сервисов пока нет</b><span>Создайте сервис в каталоге и назначьте ему календарь.</span></div>{% endfor %}
+  </div>
+</section>
+
+<script>
+(function(){
+  const dayShort=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  function selectedDays(form){return [...form.querySelectorAll('[data-weekdays] input:checked')].map(x=>Number(x.value)).sort((a,b)=>a-b)}
+  function daysLabel(days){
+    const key=days.join(',');
+    if(key==='0,1,2,3,4') return 'Пн–Пт';
+    if(key==='0,1,2,3,4,5') return 'Пн–Сб';
+    if(key==='0,1,2,3,4,5,6') return 'Каждый день';
+    return days.map(i=>dayShort[i]).join(', ') || 'Нет рабочих дней';
+  }
+  function duration(start,end){
+    if(!start||!end)return '—';
+    const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
+    let min=(eh*60+em)-(sh*60+sm); if(min<0)min+=24*60;
+    const h=Math.floor(min/60),m=min%60; return h+(m?' ч '+m+' мин':' ч.');
+  }
+  function syncForm(form){
+    const days=selectedDays(form); const out=form.querySelector('[data-weekdays-output]'); if(out)out.value=days.join(',');
+    form.querySelectorAll('.sla-day').forEach(el=>el.classList.toggle('selected',el.querySelector('input').checked));
+    const start=form.querySelector('[name="work_start"]')?.value,end=form.querySelector('[name="work_end"]')?.value;
+    const durationEl=form.querySelector('[data-shift-duration]'); if(durationEl)durationEl.textContent=duration(start,end);
+    const summary=form.querySelector('[data-summary]'); if(summary)summary.textContent=daysLabel(days)+' · '+(start||'—')+'–'+(end||'—');
+  }
+  function holidayValues(form){
+    const out=form.querySelector('[data-holidays-output]'); if(!out)return [];
+    return (out.value||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).sort();
+  }
+  function renderHolidays(form){
+    const list=form.querySelector('[data-holiday-list]'); const out=form.querySelector('[data-holidays-output]'); if(!list||!out)return;
+    const values=[...new Set(holidayValues(form))].sort(); out.value=values.join('\n'); list.innerHTML='';
+    if(!values.length){const e=document.createElement('span');e.className='holiday-empty';e.textContent='Исключений пока нет';list.appendChild(e);return;}
+    values.forEach(value=>{const chip=document.createElement('span');chip.className='holiday-chip';const d=new Date(value+'T00:00:00');const label=Number.isNaN(d.getTime())?value:d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'});chip.innerHTML='<span>'+label+'</span><button type="button" aria-label="Удалить">×</button>';chip.querySelector('button').addEventListener('click',()=>{out.value=values.filter(v=>v!==value).join('\n');renderHolidays(form)});list.appendChild(chip)});
+  }
+  document.querySelectorAll('[data-sla-form]').forEach(form=>{
+    form.querySelectorAll('[data-weekdays] input').forEach(input=>input.addEventListener('change',()=>syncForm(form)));
+    form.querySelectorAll('[name="work_start"],[name="work_end"]').forEach(input=>input.addEventListener('change',()=>syncForm(form)));
+    form.querySelectorAll('[data-preset]').forEach(btn=>btn.addEventListener('click',()=>{const set=btn.dataset.preset==='five'?[0,1,2,3,4]:btn.dataset.preset==='six'?[0,1,2,3,4,5]:[0,1,2,3,4,5,6];form.querySelectorAll('[data-weekdays] input').forEach(x=>x.checked=set.includes(Number(x.value)));form.querySelectorAll('[data-preset]').forEach(x=>x.classList.toggle('active',x===btn));syncForm(form)}));
+    const add=form.querySelector('[data-add-holiday]'); if(add)add.addEventListener('click',()=>{const inp=form.querySelector('[data-holiday-date]'),out=form.querySelector('[data-holidays-output]');if(!inp?.value||!out)return;const vals=holidayValues(form);if(!vals.includes(inp.value))vals.push(inp.value);out.value=vals.sort().join('\n');inp.value='';renderHolidays(form)});
+    renderHolidays(form); syncForm(form);
+    form.addEventListener('submit',()=>{syncForm(form);renderHolidays(form)});
+  });
+  document.querySelectorAll('[data-calendar-toggle]').forEach(btn=>btn.addEventListener('click',()=>{const id=btn.dataset.calendarToggle,form=document.getElementById('calendar-edit-'+id);if(!form)return;form.hidden=!form.hidden;if(!form.hidden)form.scrollIntoView({behavior:'smooth',block:'nearest'})}));
+})();
+</script>
 {% endblock %}
