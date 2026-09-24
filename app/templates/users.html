@@ -1,131 +1,129 @@
-{% extends "base.html" %}{% block title %}Пользователи и роли — {{ app_name }}{% endblock %}{% block content %}
-<div class="pagehead users-pagehead">
+{% extends "base.html" %}
+{% block title %}Пользователи — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead users-pagehead-clean">
   <div>
-    <div class="eyebrow">RBAC / КОНТРОЛЬ ДОСТУПА</div>
-    <h1>Пользователи и роли</h1>
-    <p>Единый центр управления сотрудниками, ролями, контактами и доступом. Права проверяются сервером и применяются жёстко.</p>
+    <div class="eyebrow">УПРАВЛЕНИЕ / ДОСТУП</div>
+    <h1>Пользователи</h1>
+    <p>Сотрудники, роли и доступ — без перегруженных таблиц и постоянно открытых форм.</p>
   </div>
   <div class="pagehead-actions">
-    <a class="btn" href="/audit">☷ Журнал контроля</a>
-    <a class="btn primary" href="#new-user-card">＋ Новый пользователь</a>
+    <a class="btn" href="/users/roles">Роли и права</a>
+    <a class="btn" href="/audit">Журнал контроля</a>
+    <a class="btn primary" href="/users/new">＋ Новый пользователь</a>
   </div>
 </div>
 
-<section class="users-hero panel panel-hero">
-  <div class="hero-copy">
-    <div class="hero-badge">Безопасность и структура доступа</div>
-    <h2>Порядок в пользователях без хаоса и «разброса»</h2>
-    <p>Теперь создание сотрудника вынесено в отдельный понятный блок, а карточки сотрудников показывают ключевую информацию и редактирование в одном месте.</p>
+<section class="panel users-overview-panel">
+  <div class="users-overview-copy">
+    <span class="section-kicker">КАТАЛОГ СОТРУДНИКОВ</span>
+    <h2>Управляйте людьми, а не полями формы</h2>
+    <p>Основная информация видна сразу. Настройки конкретного сотрудника раскрываются только по кнопке «Редактировать».</p>
   </div>
-  <div class="hero-stats compact-stats">
-    <div class="hero-stat"><span>Всего сотрудников</span><b>{{ users|length }}</b><small>в каталоге FMTS</small></div>
-    <div class="hero-stat"><span>Активные</span><b>{{ users|selectattr('active')|list|length }}</b><small>имеют доступ к системе</small></div>
-    <div class="hero-stat"><span>Техники</span><b>{{ users|selectattr('role','equalto','technician')|list|length }}</b><small>полевые исполнители</small></div>
-    <div class="hero-stat"><span>Администраторы</span><b>{{ users|selectattr('role','equalto','admin')|list|length }}</b><small>контроль платформы</small></div>
+  <div class="users-overview-stats">
+    <div><span>Всего</span><b>{{ users|length }}</b></div>
+    <div><span>Активные</span><b>{{ users|selectattr('active')|list|length }}</b></div>
+    <div><span>Техники</span><b>{{ users|selectattr('role','equalto','technician')|list|length }}</b></div>
+    <div><span>Админы</span><b>{{ users|selectattr('role','equalto','admin')|list|length }}</b></div>
   </div>
 </section>
 
-<div class="users-layout-modern">
-  <section class="panel create-user-panel" id="new-user-card">
-    <div class="panelhead panelhead-tight">
-      <div>
-        <h2>Новый пользователь</h2>
-        <p class="muted">Отдельная форма создания: основные данные, контакты, роль и расчётная ставка.</p>
-      </div>
-    </div>
-    <form class="form user-create-grid" method="post" action="/users/new">
-      <div class="form-block">
-        <div class="form-block-title">Основные данные</div>
-        <div class="user-form-grid-two">
-          <label>ФИО<input name="full_name" required placeholder="Например: Петров Пётр Петрович"></label>
-          <label>Логин<input name="username" required autocomplete="username" placeholder="petrov"></label>
-        </div>
-        <label>Пароль<input type="password" name="password" minlength="10" required autocomplete="new-password" placeholder="Не менее 10 символов"><small class="field-hint">Минимум 10 символов. Используйте надёжный пароль.</small></label>
-      </div>
-      <div class="form-block">
-        <div class="form-block-title">Контакты и связь</div>
-        <div class="user-form-grid-two">
-          <label>E-mail<input type="email" name="email" placeholder="user@company.kz"></label>
-          <label>Телефон<input name="phone" placeholder="+7 777 000 00 00"></label>
-          <label class="span-2">Telegram chat ID<input name="telegram_chat_id" placeholder="Например: 123456789"></label>
-        </div>
-      </div>
-      <div class="form-block">
-        <div class="form-block-title">Права и экономика</div>
-        <div class="user-form-grid-two">
-          <label>Роль<select name="role"><option value="requester">Заявитель</option><option value="technician">Техник</option><option value="dispatcher">Диспетчер</option><option value="manager">Руководитель</option><option value="admin">Администратор</option></select></label>
-          <label>Расчётная ставка, ₸/ч<input type="number" step="0.01" min="0" name="hourly_rate" value="0"><small class="field-hint">Нужна для расчёта трудозатрат и себестоимости, а не для зарплатного учёта.</small></label>
-        </div>
-      </div>
-      <div class="form-actions-inline end"><button class="btn primary" type="submit">Создать пользователя</button></div>
-    </form>
-  </section>
-
-  <aside class="panel roles-panel-modern">
-    <div class="panelhead panelhead-tight"><div><h2>Матрица ответственности</h2><p class="muted">Кто что видит и чем управляет в системе.</p></div></div>
-    <div class="role-stack-modern">
-      <div class="role-card-modern requester"><b>Заявитель</b><p>Создаёт заявку, видит только свои обращения и переписку. Не видит KPI, склад, ППР, подрядчиков, сотрудников и настройки.</p></div>
-      <div class="role-card-modern technician"><b>Техник</b><p>Работает только с назначенными ему заявками, ведёт таймер, списывает материалы и заполняет комментарии мастера. Видит только свой KPI.</p></div>
-      <div class="role-card-modern dispatcher"><b>Диспетчер</b><p>Видит весь оперативный контур, назначает исполнителей, управляет заявками, объектами, оборудованием, ППР и подрядчиками.</p></div>
-      <div class="role-card-modern manager"><b>Руководитель</b><p>Контролирует KPI команды, стоимость, финальное закрытие и журнал контроля. Не занимается системным администрированием.</p></div>
-      <div class="role-card-modern admin"><b>Администратор</b><p>Полный доступ: пользователи, роли, справочники, интеграции, API, аудит и настройки платформы.</p></div>
-    </div>
-  </aside>
-</div>
-
-<section class="panel staff-catalog-panel">
-  <div class="panelhead panelhead-tight">
-    <div>
-      <h2>Каталог сотрудников</h2>
-      <p class="muted">Карточки сотрудников с контактами, ролью, источником каталога и быстрым редактированием.</p>
-    </div>
+<section class="users-toolbar panel">
+  <div class="users-search-wrap">
+    <span class="users-search-icon">⌕</span>
+    <input id="users-search" type="search" placeholder="Найти сотрудника, логин, e-mail или телефон" autocomplete="off">
   </div>
-  <div class="user-cards-grid">
-    {% for x in users %}
-    <article class="user-card-modern {% if not x.active %}inactive{% endif %}">
-      <div class="user-card-top">
-        <div class="user-persona">
-          <div class="user-avatar-xl">{{ (x.full_name or x.username or 'U')[:1] | upper }}</div>
-          <div>
-            <h3>{{ x.full_name }}</h3>
-            <div class="user-subline">@{{ x.username }}</div>
-            <div class="user-badges-row">
-              <span class="badge role-pill role-{{ x.role }}">{{ role_labels.get(x.role,x.role) }}</span>
-              {% if x.active %}<span class="badge soft-green">Активен</span>{% else %}<span class="badge soft-red">Отключён</span>{% endif %}
-            </div>
+  <select id="users-role-filter" aria-label="Фильтр по роли">
+    <option value="">Все роли</option>
+    <option value="requester">Заявитель</option>
+    <option value="technician">Техник</option>
+    <option value="dispatcher">Диспетчер</option>
+    <option value="manager">Руководитель</option>
+    <option value="admin">Администратор</option>
+  </select>
+  <select id="users-status-filter" aria-label="Фильтр по статусу">
+    <option value="">Все статусы</option>
+    <option value="active">Активные</option>
+    <option value="inactive">Отключённые</option>
+  </select>
+  <div class="users-found"><b id="users-found-count">{{ users|length }}</b><span>найдено</span></div>
+</section>
+
+<section class="user-cards-grid clean-user-grid" id="users-catalog">
+  {% for x in users %}
+  <article class="user-card-v2 {% if not x.active %}is-inactive{% endif %}" data-user-card data-role="{{x.role}}" data-status="{{'active' if x.active else 'inactive'}}" data-search="{{(x.full_name ~ ' ' ~ x.username ~ ' ' ~ (x.email or '') ~ ' ' ~ (x.phone or '') ~ ' ' ~ (x.telegram_chat_id or ''))|lower}}">
+    <div class="user-card-v2-head">
+      <div class="user-identity-v2">
+        <div class="user-avatar-v2">{{ (x.full_name or x.username or 'U')[:1] | upper }}</div>
+        <div class="user-name-v2">
+          <h3>{{x.full_name}}</h3>
+          <span>@{{x.username}}</span>
+          <div class="user-badges-v2">
+            <span class="badge role-pill role-{{x.role}}">{{role_labels.get(x.role,x.role)}}</span>
+            {% if x.active %}<span class="status-dot-badge active"><i></i>Активен</span>{% else %}<span class="status-dot-badge inactive"><i></i>Отключён</span>{% endif %}
           </div>
         </div>
-        <div class="user-rate-box">
-          <span>Ставка</span>
-          <b>{{ x.hourly_rate or 0 }} ₸/ч</b>
+      </div>
+      <div class="user-card-rate-v2"><span>Ставка</span><b>{{x.hourly_rate or 0}} ₸/ч</b></div>
+    </div>
+
+    <div class="user-meta-strip-v2">
+      <div><span>Каталог</span><b>{% if x.directory_source=='ldap' %}AD / LDAP{% elif x.directory_source=='system' %}Система{% else %}Локальный{% endif %}</b></div>
+      <div><span>Подразделение</span><b>{% if x.department_id and departments.get(x.department_id) %}{{departments.get(x.department_id).name}}{% else %}—{% endif %}</b></div>
+      <div><span>Руководитель</span><b>{% if x.manager_user_id and managers.get(x.manager_user_id) %}{{managers.get(x.manager_user_id).full_name}}{% else %}—{% endif %}</b></div>
+    </div>
+
+    <div class="user-contact-row-v2">
+      <div><span>E-mail</span><b>{{x.email or 'Не указан'}}</b></div>
+      <div><span>Телефон</span><b>{{x.phone or 'Не указан'}}</b></div>
+      <div><span>Telegram</span><b>{{x.telegram_chat_id or 'Не указан'}}</b></div>
+    </div>
+
+    {% if x.username == '__system__' or x.directory_source == 'system' %}
+    <div class="system-account-note"><span>⚙</span><div><b>Системная учётная запись</b><small>Используется FMTS для автоматических заявок и фоновых операций.</small></div></div>
+    {% else %}
+    <details class="user-edit-disclosure">
+      <summary><span>Редактировать</span><b>Настройки сотрудника</b><i>⌄</i></summary>
+      <form class="user-settings-form" method="post" action="/users/{{x.id}}/update">
+        <div class="user-settings-grid">
+          <label><span>E-mail</span><input type="email" name="email" value="{{x.email}}" placeholder="user@company.kz"></label>
+          <label><span>Телефон</span><input name="phone" value="{{x.phone}}" placeholder="+7 777 000 00 00"></label>
+          <label><span>Telegram chat ID</span><input name="telegram_chat_id" value="{{x.telegram_chat_id}}" placeholder="123456789"></label>
+          <label><span>Ставка, ₸/ч</span><input type="number" step="0.01" min="0" name="hourly_rate" value="{{x.hourly_rate or 0}}"></label>
+          <label><span>Роль</span><select name="role"><option value="requester" {% if x.role=='requester' %}selected{% endif %}>Заявитель</option><option value="technician" {% if x.role=='technician' %}selected{% endif %}>Техник</option><option value="dispatcher" {% if x.role=='dispatcher' %}selected{% endif %}>Диспетчер</option><option value="manager" {% if x.role=='manager' %}selected{% endif %}>Руководитель</option><option value="admin" {% if x.role=='admin' %}selected{% endif %}>Администратор</option></select></label>
+          <label class="access-toggle-field"><span>Доступ</span><span class="access-toggle-box"><input type="checkbox" name="active" value="1" {% if x.active %}checked{% endif %}><b>Учётная запись активна</b></span></label>
         </div>
-      </div>
-
-      <div class="user-info-chips">
-        <span><b>Каталог:</b> {{ x.directory_source|upper }}</span>
-        <span><b>Подразделение:</b> {% if x.department_id and departments.get(x.department_id) %}{{ departments.get(x.department_id).name }}{% else %}—{% endif %}</span>
-        <span><b>Руководитель:</b> {% if x.manager_user_id and managers.get(x.manager_user_id) %}{{ managers.get(x.manager_user_id).full_name }}{% else %}—{% endif %}</span>
-      </div>
-
-      <div class="user-contact-grid">
-        <div><span>E-mail</span><b>{{ x.email or '—' }}</b></div>
-        <div><span>Телефон</span><b>{{ x.phone or '—' }}</b></div>
-        <div><span>Telegram</span><b>{{ x.telegram_chat_id or '—' }}</b></div>
-      </div>
-
-      <form class="user-edit-form-modern" method="post" action="/users/{{ x.id }}/update">
-        <div class="user-form-grid-two">
-          <label>E-mail<input type="email" name="email" value="{{ x.email }}" placeholder="user@company.kz"></label>
-          <label>Телефон<input name="phone" value="{{ x.phone }}" placeholder="+7 777 000 00 00"></label>
-          <label>Telegram chat ID<input name="telegram_chat_id" value="{{ x.telegram_chat_id }}" placeholder="123456789"></label>
-          <label>Ставка, ₸/ч<input type="number" step="0.01" min="0" name="hourly_rate" value="{{ x.hourly_rate or 0 }}"></label>
-          <label>Роль<select name="role" aria-label="Роль {{x.full_name}}"><option value="requester" {% if x.role=='requester' %}selected{% endif %}>Заявитель</option><option value="technician" {% if x.role=='technician' %}selected{% endif %}>Техник</option><option value="dispatcher" {% if x.role=='dispatcher' %}selected{% endif %}>Диспетчер</option><option value="manager" {% if x.role=='manager' %}selected{% endif %}>Руководитель</option><option value="admin" {% if x.role=='admin' %}selected{% endif %}>Администратор</option></select></label>
-          <label class="toggle-field"><span>Статус доступа</span><span class="toggle-wrap"><input type="checkbox" name="active" value="1" {% if x.active %}checked{% endif %}><b>Активен</b></span></label>
-        </div>
-        <div class="form-actions-inline"><button class="btn" type="submit">Сохранить изменения</button></div>
+        <div class="user-settings-actions"><button class="btn primary" type="submit">Сохранить изменения</button></div>
       </form>
-    </article>
-    {% endfor %}
-  </div>
+    </details>
+    {% endif %}
+  </article>
+  {% endfor %}
 </section>
+
+<div class="users-empty-state" id="users-empty-state" hidden>
+  <div>⌕</div><h3>Ничего не найдено</h3><p>Измените поиск или фильтры.</p>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function(){
+ const search=document.getElementById('users-search');
+ const role=document.getElementById('users-role-filter');
+ const status=document.getElementById('users-status-filter');
+ const cards=[...document.querySelectorAll('[data-user-card]')];
+ const count=document.getElementById('users-found-count');
+ const empty=document.getElementById('users-empty-state');
+ function apply(){
+   const q=(search.value||'').trim().toLowerCase();
+   const r=role.value; const s=status.value; let visible=0;
+   cards.forEach(card=>{
+     const ok=(!q || card.dataset.search.includes(q)) && (!r || card.dataset.role===r) && (!s || card.dataset.status===s);
+     card.hidden=!ok; if(ok) visible++;
+   });
+   count.textContent=visible; empty.hidden=visible!==0;
+ }
+ [search,role,status].forEach(el=>el.addEventListener(el.tagName==='INPUT'?'input':'change',apply));
+})();
+</script>
 {% endblock %}

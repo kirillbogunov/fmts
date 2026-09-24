@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Новый пользователь — {{app_name}}{% endblock %}
+{% block content %}
+<div class="pagehead">
+  <div><div class="eyebrow">УПРАВЛЕНИЕ / ПОЛЬЗОВАТЕЛИ</div><h1>Новый пользователь</h1><p>Создайте сотрудника в отдельной форме — без смешивания с каталогом и матрицей ролей.</p></div>
+  <a class="btn" href="/users">← К пользователям</a>
+</div>
+
+<div class="new-user-page-grid">
+<section class="panel new-user-form-panel">
+  <form class="form modern-form" method="post" action="/users/new">
+    <div class="modern-form-section"><span class="form-section-no">01</span><div><h2>Основные данные</h2><p>Имя сотрудника и данные для входа.</p></div></div>
+    <div class="modern-form-fields two"><label><span>ФИО</span><input name="full_name" required placeholder="Петров Пётр Петрович"></label><label><span>Логин</span><input name="username" required autocomplete="username" placeholder="petrov"></label></div>
+    <label><span>Пароль</span><input type="password" name="password" minlength="10" required autocomplete="new-password" placeholder="Не менее 10 символов"><small>Минимум 10 символов.</small></label>
+
+    <div class="modern-form-section"><span class="form-section-no">02</span><div><h2>Контакты</h2><p>Каналы, через которые FMTS сможет связаться с сотрудником.</p></div></div>
+    <div class="modern-form-fields two"><label><span>E-mail</span><input type="email" name="email" placeholder="user@company.kz"></label><label><span>Телефон</span><input name="phone" placeholder="+7 777 000 00 00"></label></div>
+    <label><span>Telegram chat ID</span><input name="telegram_chat_id" placeholder="123456789"></label>
+
+    <div class="modern-form-section"><span class="form-section-no">03</span><div><h2>Роль и ставка</h2><p>Права сотрудника и расчётная ставка для себестоимости трудозатрат.</p></div></div>
+    <div class="modern-form-fields two"><label><span>Роль</span><select name="role"><option value="requester">Заявитель</option><option value="technician">Техник</option><option value="dispatcher">Диспетчер</option><option value="manager">Руководитель</option><option value="admin">Администратор</option></select></label><label><span>Расчётная ставка, ₸/ч</span><input type="number" step="0.01" min="0" name="hourly_rate" value="0"><small>Не является полем зарплаты.</small></label></div>
+    <div class="modern-form-footer"><a class="btn" href="/users">Отмена</a><button class="btn primary" type="submit">Создать пользователя</button></div>
+  </form>
+</section>
+<aside class="panel user-create-sidecard"><div class="create-side-icon">＋</div><h2>Что произойдёт после создания</h2><div class="create-side-list"><div><b>1</b><span>Сотрудник появится в каталоге пользователей.</span></div><div><b>2</b><span>Права будут применены согласно выбранной роли.</span></div><div><b>3</b><span>Контакты можно использовать для уведомлений.</span></div><div><b>4</b><span>Ставка будет участвовать в расчёте себестоимости работ.</span></div></div></aside>
+</div>
+{% endblock %}

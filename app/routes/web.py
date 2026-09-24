@@ -1153,6 +1153,20 @@ def users_page(request:Request,db:Session=Depends(get_db)):
     managers={x.id:x for x in users}
     return templates.TemplateResponse("users.html",ctx(request,db,users=users,departments=departments,managers=managers))
 
+@router.get("/users/new", response_class=HTMLResponse)
+def user_new_page(request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    if not has_permission(u,"users.manage"): return forbidden(request,db,u,"users.manage")
+    return templates.TemplateResponse("user_new.html",ctx(request,db))
+
+@router.get("/users/roles", response_class=HTMLResponse)
+def user_roles_page(request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    if not has_permission(u,"users.manage"): return forbidden(request,db,u,"users.manage")
+    return templates.TemplateResponse("user_roles.html",ctx(request,db))
+
 @router.post("/users/new")
 def user_new(request:Request,username:str=Form(...),full_name:str=Form(...),password:str=Form(...),role:str=Form("requester"),email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),hourly_rate:str=Form("0"),db:Session=Depends(get_db)):
     u=user_or_login(request,db)

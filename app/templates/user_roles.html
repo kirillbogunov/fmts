@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Роли и права — {{app_name}}{% endblock %}
+{% block content %}
+<div class="pagehead"><div><div class="eyebrow">RBAC / ПРАВА ДОСТУПА</div><h1>Роли и ответственность</h1><p>Отдельная страница с понятным распределением прав в FMTS.</p></div><a class="btn" href="/users">← К пользователям</a></div>
+<div class="roles-page-grid">
+  <section class="role-access-card requester"><div class="role-access-icon">З</div><div><h2>Заявитель</h2><p>Создаёт заявки, видит только свои обращения и переписку.</p></div><ul><li>Создание заявок</li><li>Просмотр своих заявок</li><li>Комментарии и уведомления</li></ul></section>
+  <section class="role-access-card technician"><div class="role-access-icon">Т</div><div><h2>Техник</h2><p>Полевой исполнитель, работающий с назначенными ему заявками.</p></div><ul><li>Рабочие статусы</li><li>Таймер и материалы</li><li>Чек-листы ТО</li><li>Собственный KPI</li></ul></section>
+  <section class="role-access-card dispatcher"><div class="role-access-icon">Д</div><div><h2>Диспетчер</h2><p>Управляет оперативным контуром Service Desk и ТОиР.</p></div><ul><li>Все заявки</li><li>Назначение исполнителей</li><li>Оборудование и объекты</li><li>ППР и подрядчики</li></ul></section>
+  <section class="role-access-card manager"><div class="role-access-icon">Р</div><div><h2>Руководитель</h2><p>Контролирует команду, затраты и итоговое качество выполнения.</p></div><ul><li>KPI команды</li><li>Стоимость заявок</li><li>Закрытие и возобновление</li><li>Журнал контроля</li></ul></section>
+  <section class="role-access-card admin"><div class="role-access-icon">А</div><div><h2>Администратор</h2><p>Полный системный доступ к платформе и интеграциям.</p></div><ul><li>Пользователи и роли</li><li>Справочники</li><li>Интеграции и API</li><li>Аудит и настройки</li></ul></section>
+</div>
+<div class="rbac-note panel"><b>Важно</b><p>Скрытие кнопок в интерфейсе не является механизмом защиты. FMTS проверяет права на сервере для каждого защищённого действия.</p></div>
+{% endblock %}
