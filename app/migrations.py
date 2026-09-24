@@ -340,3 +340,36 @@ _original_run_lightweight_migrations_v075 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v075(engine)
     _run_v076_mobile_checklists(engine)
+
+# v0.7.6.2: planned-maintenance notifications and SLA policy.
+def _run_v0762_maintenance_policy(engine: Engine) -> None:
+    cols = _columns(engine, "maintenance_plans")
+    if not cols:
+        return
+    additions = {
+        "create_before_days": "INTEGER DEFAULT 7",
+        "notify_before_days": "INTEGER DEFAULT 7",
+        "repeat_notify_before_days": "INTEGER DEFAULT 1",
+        "notify_owner": "BOOLEAN DEFAULT TRUE",
+        "notify_assignee": "BOOLEAN DEFAULT TRUE",
+        "notify_dispatchers": "BOOLEAN DEFAULT TRUE",
+        "response_sla_minutes": "INTEGER DEFAULT 480",
+        "due_time": "VARCHAR(5) DEFAULT '18:00'",
+        "grace_days": "INTEGER DEFAULT 1",
+    }
+    with engine.begin() as conn:
+        for name, ddl in additions.items():
+            if name not in cols:
+                conn.execute(text(f"ALTER TABLE maintenance_plans ADD COLUMN {name} {ddl}"))
+        conn.execute(text("UPDATE maintenance_plans SET create_before_days=7 WHERE create_before_days IS NULL"))
+        conn.execute(text("UPDATE maintenance_plans SET notify_before_days=7 WHERE notify_before_days IS NULL"))
+        conn.execute(text("UPDATE maintenance_plans SET repeat_notify_before_days=1 WHERE repeat_notify_before_days IS NULL"))
+        conn.execute(text("UPDATE maintenance_plans SET response_sla_minutes=480 WHERE response_sla_minutes IS NULL"))
+        conn.execute(text("UPDATE maintenance_plans SET due_time='18:00' WHERE due_time IS NULL OR due_time=''"))
+        conn.execute(text("UPDATE maintenance_plans SET grace_days=1 WHERE grace_days IS NULL"))
+
+_original_run_lightweight_migrations_v076 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v076(engine)
+    _run_v0762_maintenance_policy(engine)

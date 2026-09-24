@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v0761-checklist-ux';
+const CACHE = 'fmts-v0762-maintenance-policy';
 const STATIC = ['/static/app.css','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));

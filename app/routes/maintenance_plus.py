@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
-from app.models import MaintenancePlan, MaintenanceChecklistItem, Ticket, TicketChecklistItem
+from app.models import MaintenancePlan, MaintenanceChecklistItem, Ticket, TicketChecklistItem, User
 from app.security import current_user
 from app.access import has_permission, can_view_ticket
 from app.routes.web import forbidden
@@ -24,6 +24,35 @@ def _descendants(db:Session, item:MaintenanceChecklistItem)->list[MaintenanceChe
         children=db.query(MaintenanceChecklistItem).filter(MaintenanceChecklistItem.parent_id==parent).all()
         out.extend(children); queue.extend(x.id for x in children)
     return out
+
+
+@router.post('/maintenance/{plan_id}/settings')
+def maintenance_settings_update(plan_id:int,request:Request,create_before_days:int=Form(7),notify_before_days:int=Form(7),repeat_notify_before_days:int=Form(1),notify_owner:str=Form(''),notify_assignee:str=Form(''),notify_dispatchers:str=Form(''),response_sla_hours:int=Form(8),due_time:str=Form('18:00'),grace_days:int=Form(1),db:Session=Depends(get_db)):
+    u=_user(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'maintenance.manage'):return forbidden(request,db,u,'maintenance.manage')
+    plan=db.get(MaintenancePlan,plan_id)
+    if not plan:return RedirectResponse('/maintenance',303)
+    owner=notify_owner=='1'; assignee=notify_assignee=='1'; dispatchers=notify_dispatchers=='1'
+    if not (owner or assignee or dispatchers):
+        return forbidden(request,db,u,'maintenance.manage','Для планового ТО обязательно выберите хотя бы одного получателя уведомлений')
+    has_real_recipient=(owner and bool(plan.equipment.owner_user_id)) or (assignee and bool(plan.assignee_id)) or (dispatchers and db.query(User.id).filter(User.active==True,User.role.in_(['dispatcher','manager','admin'])).first() is not None)
+    if not has_real_recipient:
+        return forbidden(request,db,u,'maintenance.manage','Нет фактического получателя уведомлений: назначьте исполнителя/ответственного или включите диспетчера')
+    repeat=max(0,int(repeat_notify_before_days or 0))
+    first=max(repeat,int(notify_before_days or 0))
+    create=max(first,int(create_before_days or 0))
+    plan.create_before_days=create
+    plan.notify_before_days=first
+    plan.repeat_notify_before_days=repeat
+    plan.notify_owner=owner
+    plan.notify_assignee=assignee
+    plan.notify_dispatchers=dispatchers
+    plan.response_sla_minutes=max(0,int(response_sla_hours or 0))*60
+    plan.due_time=(due_time or '18:00')[:5]
+    plan.grace_days=max(0,int(grace_days or 0))
+    db.commit();audit(db,request,u,'maintenance.settings.update',entity_type='maintenance',entity_id=plan.id,details=f'create={create}; first={first}; repeat={repeat}; sla_response={plan.response_sla_minutes}; due={plan.due_time}; grace={plan.grace_days}')
+    return RedirectResponse(f'/maintenance#plan-{plan.id}',303)
 
 @router.post('/maintenance/{plan_id}/checklist/items')
 def checklist_add(plan_id:int,request:Request,title:str=Form(...),parent_id:str=Form(''),instructions:str=Form(''),sort_order:int=Form(0),required:str=Form('1'),db:Session=Depends(get_db)):

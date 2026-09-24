@@ -8,6 +8,30 @@
   {% set rows = checklist_by_plan.get(p.id,[]) %}
   <div class="plan-checklist-summary"><div><span>Пунктов</span><b>{{rows|length}}</b></div><div><span>Уровней</span><b>{{ (rows|map(attribute='depth')|max + 1) if rows else 0 }}</b></div><div><span>Следующий запуск</span><b>{{p.next_run.strftime('%d.%m.%Y')}}</b></div></div>
 
+  <div class="maintenance-policy-summary">
+    <div><span>Заявка создаётся</span><b>за {{p.create_before_days}} дн.</b></div>
+    <div><span>Напоминания</span><b>{{p.notify_before_days}} / {{p.repeat_notify_before_days}} дн.</b></div>
+    <div><span>SLA реакции</span><b>{{ (p.response_sla_minutes / 60)|round(1) }} ч</b></div>
+    <div><span>SLA выполнения</span><b>{{p.next_run.strftime('%d.%m')}} {{p.due_time}}{% if p.grace_days %} +{{p.grace_days}} дн.{% endif %}</b></div>
+  </div>
+  {% if can('maintenance.manage') %}
+  <details class="maintenance-policy-editor">
+    <summary><span>🔔 Сроки, SLA и уведомления</span><b>обязательно</b></summary>
+    <form method="post" action="/maintenance/{{p.id}}/settings" class="form maintenance-policy-form">
+      <div class="policy-grid">
+        <label>Создать заявку заранее, дней<input type="number" name="create_before_days" min="0" value="{{p.create_before_days}}"><small>Например 7 — заявка появится за неделю до ТО.</small></label>
+        <label>Первое напоминание, дней<input type="number" name="notify_before_days" min="0" value="{{p.notify_before_days}}"></label>
+        <label>Повторное напоминание, дней<input type="number" name="repeat_notify_before_days" min="0" value="{{p.repeat_notify_before_days}}"></label>
+        <label>SLA реакции, часов<input type="number" name="response_sla_hours" min="0" value="{{ (p.response_sla_minutes / 60)|int }}"></label>
+        <label>Выполнить до<input type="time" name="due_time" value="{{p.due_time}}"></label>
+        <label>Допустимое опоздание, дней<input type="number" name="grace_days" min="0" value="{{p.grace_days}}"></label>
+      </div>
+      <div class="notification-targets"><b>Кого уведомлять</b><label class="policy-check"><input type="checkbox" name="notify_owner" value="1" {% if p.notify_owner %}checked{% endif %}><span>Ответственного за оборудование</span></label><label class="policy-check"><input type="checkbox" name="notify_assignee" value="1" {% if p.notify_assignee %}checked{% endif %}><span>Исполнителя ТО</span></label><label class="policy-check"><input type="checkbox" name="notify_dispatchers" value="1" {% if p.notify_dispatchers %}checked{% endif %}><span>Диспетчера / руководителя</span></label><small>Должен быть выбран минимум один получатель.</small></div>
+      <button class="btn primary">Сохранить сроки и уведомления</button>
+    </form>
+  </details>
+  {% endif %}
+
   <details class="plan-checklist-editor" data-plan-id="{{p.id}}">
     <summary><span>☑ Чек-лист обслуживания</span><b>{{rows|length}} пунктов</b></summary>
     {% if can('maintenance.manage') %}
@@ -53,7 +77,9 @@
 </div>
 
 {% if can('maintenance.manage') %}
-<section class="panel maintenance-new-card"><div class="panelhead"><div><h2>Новый план обслуживания</h2><p class="muted">Сначала создайте план. Чек-лист соберёте ниже простыми кнопками «Добавить пункт» и «+ подпункт».</p></div></div><form class="form maintenance-new-form" method="post" action="/maintenance/new"><div class="form-grid"><label>Оборудование<select name="equipment_id">{% for x in equipment %}<option value="{{x.id}}">{{x.inventory_no}} — {{x.name}} / {{x.site.name}}</option>{% endfor %}</select></label><label>Название<input name="name" required placeholder="Ежемесячное ТО холодильника"></label><label>Период, дней<input type="number" inputmode="numeric" name="interval_days" value="30" min="1"></label><label>Следующая дата<input type="date" name="next_run" required></label><label>Исполнитель<select name="assignee_id"><option value="">Не назначен</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label></div><input type="hidden" name="checklist" value=""><button class="btn primary">Создать план и перейти к чек-листу</button></form></section>
+<section class="panel maintenance-new-card"><div class="panelhead"><div><h2>Новый план обслуживания</h2><p class="muted">FMTS сам создаст заявку от «Системы», укажет объект заявителем и рассчитает SLA относительно даты ТО.</p></div></div><form class="form maintenance-new-form" method="post" action="/maintenance/new"><div class="form-grid"><label>Оборудование<select name="equipment_id">{% for x in equipment %}<option value="{{x.id}}">{{x.inventory_no}} — {{x.name}} / {{x.site.name}}</option>{% endfor %}</select></label><label>Название<input name="name" required placeholder="Ежемесячное ТО холодильника"></label><label>Период, дней<input type="number" inputmode="numeric" name="interval_days" value="30" min="1"></label><label>Плановая дата<input type="date" name="next_run" required></label><label>Исполнитель<select name="assignee_id"><option value="">Не назначен</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label></div>
+<div class="new-plan-policy"><div class="policy-heading"><span>🔔</span><div><b>Сроки и уведомления</b><small>Для планового ТО уведомления обязательны</small></div></div><div class="policy-grid"><label>Создать заявку заранее, дней<input type="number" name="create_before_days" min="0" value="7"></label><label>Первое напоминание, дней<input type="number" name="notify_before_days" min="0" value="7"></label><label>Повторное напоминание, дней<input type="number" name="repeat_notify_before_days" min="0" value="1"></label><label>SLA реакции, часов<input type="number" name="response_sla_hours" min="0" value="8"></label><label>Выполнить до<input type="time" name="due_time" value="18:00"></label><label>Допуск после даты, дней<input type="number" name="grace_days" min="0" value="1"></label></div><div class="notification-targets"><b>Уведомить</b><label class="policy-check"><input type="checkbox" name="notify_owner" value="1" checked><span>Ответственного оборудования</span></label><label class="policy-check"><input type="checkbox" name="notify_assignee" value="1" checked><span>Исполнителя</span></label><label class="policy-check"><input type="checkbox" name="notify_dispatchers" value="1" checked><span>Диспетчера / руководителя</span></label></div></div>
+<input type="hidden" name="checklist" value=""><button class="btn primary">Создать план и перейти к чек-листу</button></form></section>
 {% endif %}
 
 <script>

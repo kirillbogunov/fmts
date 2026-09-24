@@ -163,6 +163,17 @@ class MaintenancePlan(Base):
     last_run: Mapped[date | None] = mapped_column(Date, nullable=True)
     next_run: Mapped[date] = mapped_column(Date)
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Planned maintenance policy. The request is created before the actual date,
+    # while resolution SLA remains tied to the maintenance window.
+    create_before_days: Mapped[int] = mapped_column(Integer, default=7)
+    notify_before_days: Mapped[int] = mapped_column(Integer, default=7)
+    repeat_notify_before_days: Mapped[int] = mapped_column(Integer, default=1)
+    notify_owner: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_assignee: Mapped[bool] = mapped_column(Boolean, default=True)
+    notify_dispatchers: Mapped[bool] = mapped_column(Boolean, default=True)
+    response_sla_minutes: Mapped[int] = mapped_column(Integer, default=480)
+    due_time: Mapped[str] = mapped_column(String(5), default="18:00")
+    grace_days: Mapped[int] = mapped_column(Integer, default=1)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     equipment: Mapped[Equipment] = relationship()
     assignee: Mapped[User | None] = relationship()

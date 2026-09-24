@@ -3,6 +3,7 @@ TICKET_TYPES={
     'request':'Запрос на обслуживание',
     'problem':'Проблема',
     'change':'Изменение',
+    'maintenance':'Плановое ТО',
 }
 RELATION_LABELS={
     'depends_on':'Зависит от',

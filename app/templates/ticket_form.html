@@ -3,7 +3,7 @@
 <form class="panel form" method="post" enctype="multipart/form-data">
 <div class="form-grid">
 <label>Заголовок<input name="title" required placeholder="Например: не охлаждает бонета №7"></label>
-<label>Тип обращения<select name="ticket_type" id="ticketType">{% for code,label in ticket_types.items() %}{% if can('itsm.view') or code in ['incident','request'] %}<option value="{{code}}">{{label}}</option>{% endif %}{% endfor %}</select><small class="field-hint">Инцидент — неисправность, запрос — плановая услуга. Проблемы и изменения доступны ServiceDesk-ролям.</small></label>
+<label>Тип обращения<select name="ticket_type" id="ticketType">{% for code,label in ticket_types.items() %}{% if code != 'maintenance' and (can('itsm.view') or code in ['incident','request']) %}<option value="{{code}}">{{label}}</option>{% endif %}{% endfor %}</select><small class="field-hint">Инцидент — неисправность, запрос — плановая услуга. Проблемы и изменения доступны ServiceDesk-ролям.</small></label>
 <label>Сервис / тип услуги<select name="service_id"><option value="">Без сервиса</option>{% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><label>Категория<select name="category">{% for c in categories %}<option value="{{c.code}}">{{c.name}}</option>{% endfor %}</select></label>
 <label>Объект / подразделение<select name="site_id" required><option value="">Выберите объект</option>{% for x in sites %}<option value="{{x.id}}">{{x.name}}</option>{% endfor %}</select></label>
 <label>Кабинет / зона<input name="room" placeholder="Например: торговый зал, кабинет 12"></label>

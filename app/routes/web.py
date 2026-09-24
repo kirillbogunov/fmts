@@ -15,12 +15,12 @@ from app.db import get_db
 from app.config import get_settings
 from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, MaintenanceChecklistItem, TicketChecklistItem, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation
 from app.security import verify_password, current_user, hash_password, verify_totp
-from app.services.maintenance import next_ticket_number, generate_due_maintenance
+from app.services.maintenance import next_ticket_number, generate_due_maintenance, complete_maintenance_plan
 from app.services.maintenance_checklist import plan_checklist_rows, ticket_checklist, snapshot_checklist, ensure_plan_items_from_legacy
 from app.services.one_c import OneCClient
 from app.services.sync import push_ticket_to_1c
 from app.labels import STATUS_LABELS, PRIORITY_LABELS, ROLE_LABELS, EQUIPMENT_STATUS_LABELS
-from app.services.ui_styles import styles_cache, badge_css, display_name, options_for, sla_hours_for
+from app.services.ui_styles import styles_cache, badge_css, display_name, options_for, sla_hours_for, style_for
 from app.services.reference_data import ensure_default_reference_data
 from app.services.urls import public_url
 from app.services.kpi import calculate_monthly_kpi, parse_period, shift_month
@@ -276,7 +276,14 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
         "low_stock":low_stock,
         "recent":recent,
         "by_status":by_status,
-        "status_chart_data":[[STATUS_LABELS.get(status,status),int(count)] for status,count in by_status],
+        "status_chart_data":[
+            [
+                display_name(styles_cache(db),"status",status,STATUS_LABELS.get(status,status)),
+                int(count),
+                (style_for(styles_cache(db),"status",status).get("text") or style_for(styles_cache(db),"status",status).get("border") or style_for(styles_cache(db),"status",status).get("bg") or "#64748b")
+            ]
+            for status,count in by_status
+        ],
         "total_count":total_count,
         "done_count":done_count,
         "dashboard_rings":dashboard_rings,
@@ -421,6 +428,7 @@ async def ticket_create(request:Request,title:str=Form(...),description:str=Form
         if picked: new_assignee_id=picked.id
     sla_hours=sla_hours_for(db,effective_priority)
     ticket_type=ticket_type if ticket_type in TICKET_TYPES else "incident"
+    if ticket_type=="maintenance": ticket_type="request"  # system-only type
     if not has_permission(u,"itsm.view") and ticket_type not in {"incident","request"}: ticket_type="request"
     planned_start=parse_local_to_utc(planned_start_at,u.timezone)
     planned_end=parse_local_to_utc(planned_end_at,u.timezone)
@@ -603,6 +611,8 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
         t.edit_version=int(t.edit_version or 1)+1
     if effective_status in ("resolved","closed") and not t.resolved_at:
         t.resolved_at=now; close_active_for_ticket(db,t.id,t.resolved_at)
+        if t.maintenance_plan_id:
+            complete_maintenance_plan(db,t,now)
     elif effective_status == "cancelled":
         close_active_for_ticket(db,t.id,now)
     elif effective_status not in ("resolved","closed") and t.resolved_at:
@@ -981,7 +991,7 @@ def maintenance(request:Request,db:Session=Depends(get_db)):
     return templates.TemplateResponse("maintenance.html",ctx(request,db,plans=plans,checklist_by_plan=checklist_by_plan,equipment=db.query(Equipment).order_by(Equipment.name).all() if has_permission(u,"maintenance.manage") else [],users=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"maintenance.manage") else []))
 
 @router.post("/maintenance/new")
-def maintenance_new(request:Request,equipment_id:int=Form(...),name:str=Form(...),interval_days:int=Form(30),next_run:str=Form(...),assignee_id:str=Form(""),checklist:str=Form(""),db:Session=Depends(get_db)):
+def maintenance_new(request:Request,equipment_id:int=Form(...),name:str=Form(...),interval_days:int=Form(30),next_run:str=Form(...),assignee_id:str=Form(""),checklist:str=Form(""),create_before_days:int=Form(7),notify_before_days:int=Form(7),repeat_notify_before_days:int=Form(1),notify_owner:str=Form(""),notify_assignee:str=Form(""),notify_dispatchers:str=Form(""),response_sla_hours:int=Form(8),due_time:str=Form("18:00"),grace_days:int=Form(1),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: return RedirectResponse("/login",303)
     if not has_permission(u,"maintenance.manage"): return forbidden(request,db,u,"maintenance.manage")
@@ -989,7 +999,32 @@ def maintenance_new(request:Request,equipment_id:int=Form(...),name:str=Form(...
         tech=db.get(User,int(assignee_id))
         if not tech or not tech.active or tech.role!="technician": return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="maintenance.manage",message="Исполнителем ППР может быть только активный техник"),status_code=400)
     items=[x.strip() for x in checklist.splitlines() if x.strip()]
-    plan=MaintenancePlan(equipment_id=equipment_id,name=name,interval_days=interval_days,next_run=date.fromisoformat(next_run),assignee_id=int(assignee_id) if assignee_id else None,checklist=json.dumps(items,ensure_ascii=False))
+    eq=db.get(Equipment,equipment_id)
+    if not eq:
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="maintenance.manage",message="Оборудование не найдено"),status_code=400)
+    notify_owner_bool=notify_owner=='1'
+    notify_assignee_bool=notify_assignee=='1'
+    notify_dispatchers_bool=notify_dispatchers=='1'
+    if not (notify_owner_bool or notify_assignee_bool or notify_dispatchers_bool):
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="maintenance.manage",message="Для планового ТО обязательно выберите хотя бы одного получателя уведомлений"),status_code=400)
+    has_real_recipient=(notify_owner_bool and bool(eq.owner_user_id)) or (notify_assignee_bool and bool(assignee_id)) or (notify_dispatchers_bool and db.query(User.id).filter(User.active==True,User.role.in_(["dispatcher","manager","admin"])).first() is not None)
+    if not has_real_recipient:
+        return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="maintenance.manage",message="У плана ТО нет фактического получателя уведомлений: назначьте исполнителя/ответственного или включите уведомление диспетчера"),status_code=400)
+    # A reminder cannot happen before the request itself exists. Make the schedule
+    # self-consistent without forcing the user to calculate it manually.
+    repeat_notify_before_days=max(0,int(repeat_notify_before_days or 0))
+    notify_before_days=max(repeat_notify_before_days,int(notify_before_days or 0))
+    create_before_days=max(notify_before_days,int(create_before_days or 0))
+    response_sla_minutes=max(0,int(response_sla_hours or 0))*60
+    grace_days=max(0,int(grace_days or 0))
+    due_time=(due_time or '18:00')[:5]
+    plan=MaintenancePlan(
+        equipment_id=equipment_id,name=name,interval_days=max(1,interval_days),next_run=date.fromisoformat(next_run),
+        assignee_id=int(assignee_id) if assignee_id else None,checklist=json.dumps(items,ensure_ascii=False),
+        create_before_days=create_before_days,notify_before_days=notify_before_days,repeat_notify_before_days=repeat_notify_before_days,
+        notify_owner=notify_owner_bool,notify_assignee=notify_assignee_bool,notify_dispatchers=notify_dispatchers_bool,
+        response_sla_minutes=response_sla_minutes,due_time=due_time,grace_days=grace_days,
+    )
     db.add(plan); db.flush()
     for idx,title in enumerate(items,1):
         # Number prefixes are display hints only; hierarchy is managed explicitly afterwards.

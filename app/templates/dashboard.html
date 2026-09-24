@@ -66,7 +66,7 @@ window.addEventListener('load', function(){
   const lineValues = dailySeries.map(p => p.count);
   const statusLabels = statusPairs.map(x => x[0]);
   const statusCounts = statusPairs.map(x => x[1]);
-  const palette = ['#2563eb','#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ef4444','#64748b','#14b8a6'];
+  const statusColors = statusPairs.map(x => x[2] || '#64748b');
 
   const lineCanvas = document.getElementById('ticketsLineChart');
   if (lineCanvas) {
@@ -122,7 +122,7 @@ window.addEventListener('load', function(){
       type: 'doughnut',
       data: {
         labels: statusLabels,
-        datasets: [{data: statusCounts, backgroundColor: palette, borderWidth: 0, hoverOffset: 8}]
+        datasets: [{data: statusCounts, backgroundColor: statusColors, borderWidth: 0, hoverOffset: 8}]
       },
       options: {
         responsive: true,

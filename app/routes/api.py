@@ -98,6 +98,7 @@ def create_ticket(payload: dict, request: Request, db: Session = Depends(get_db)
     sla_hours = sla_hours_for(db, priority)
     ticket_type=str(payload.get("ticket_type") or "incident")
     if ticket_type not in TICKET_TYPES: ticket_type="incident"
+    if ticket_type=="maintenance": ticket_type="request"  # system-only type
     if not has_permission(user,"itsm.view") and ticket_type not in {"incident","request"}: ticket_type="request"
     t = Ticket(number=next_ticket_number(db), title=str(payload.get("title") or "Без названия"),
                description=str(payload.get("description") or ""), category=str(payload.get("category") or "Другое"),
