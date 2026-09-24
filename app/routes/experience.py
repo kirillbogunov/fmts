@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 
 from app.db import get_db
 from app.models import (
@@ -35,8 +35,34 @@ def _parse_local(value: str, tz_name: str) -> datetime:
 
 
 def _survey_questions(text: str) -> list[dict]:
-    rows = []
-    for raw in (text or '').splitlines():
+    """Parse survey questions from the modern JSON builder or legacy line format.
+
+    JSON is the primary UI format from v0.7.6.11 onward.  The old
+    ``rating|Question`` format is still accepted so existing integrations and
+    old forms keep working without a migration.
+    """
+    raw_text = (text or '').strip()
+    rows: list[dict] = []
+    if raw_text.startswith('['):
+        try:
+            payload = json.loads(raw_text)
+        except Exception:
+            payload = []
+        if isinstance(payload, list):
+            for item in payload:
+                if not isinstance(item, dict):
+                    continue
+                kind = str(item.get('type') or 'rating').strip().lower()
+                if kind not in {'rating','yesno','text'}:
+                    kind = 'rating'
+                label = str(item.get('label') or '').strip()[:500]
+                if not label:
+                    continue
+                required = bool(item.get('required', kind != 'text'))
+                rows.append({'type':kind,'label':label,'required':required})
+        return rows[:30]
+
+    for raw in raw_text.splitlines():
         raw = raw.strip()
         if not raw:
             continue
@@ -47,9 +73,9 @@ def _survey_questions(text: str) -> list[dict]:
         kind = kind.strip().lower()
         if kind not in {'rating','yesno','text'}:
             kind = 'rating'
-        label = label.strip()
+        label = label.strip()[:500]
         if label:
-            rows.append({'type':kind,'label':label})
+            rows.append({'type':kind,'label':label,'required':kind != 'text'})
     return rows[:30]
 
 
@@ -115,10 +141,42 @@ def surveys_page(request: Request, db: Session = Depends(get_db)):
         return forbidden(request, db, u, 'survey.respond')
     rows = db.query(SurveyTemplate).order_by(SurveyTemplate.name).all() if has_permission(u, 'survey.manage') else []
     responses = []
+    survey_items = []
+    stats = {'active': 0, 'responses': 0, 'avg_score': 0.0}
     if has_permission(u, 'survey.manage'):
         responses = db.query(SurveyResponse).order_by(SurveyResponse.id.desc()).limit(200).all()
+        aggregates = {
+            sid: (count or 0, float(avg or 0))
+            for sid, count, avg in db.query(
+                SurveyResponse.survey_id,
+                func.count(SurveyResponse.id),
+                func.avg(SurveyResponse.score),
+            ).group_by(SurveyResponse.survey_id).all()
+        }
+        total_count = sum(v[0] for v in aggregates.values())
+        weighted = sum(v[0] * v[1] for v in aggregates.values())
+        stats = {
+            'active': sum(1 for row in rows if row.active),
+            'responses': total_count,
+            'avg_score': round(weighted / total_count, 2) if total_count else 0.0,
+        }
+        for row in rows:
+            count, avg = aggregates.get(row.id, (0, 0.0))
+            try:
+                questions = json.loads(row.questions_json or '[]')
+            except Exception:
+                questions = []
+            normalized = []
+            for q in questions if isinstance(questions, list) else []:
+                if not isinstance(q, dict):
+                    continue
+                kind = str(q.get('type') or 'rating')
+                label = str(q.get('label') or '').strip()
+                if label:
+                    normalized.append({'type': kind, 'label': label, 'required': bool(q.get('required', kind != 'text'))})
+            survey_items.append({'row': row, 'questions': normalized, 'response_count': count, 'avg_score': round(avg, 2) if count else 0})
     services = db.query(ServiceCatalog).filter(ServiceCatalog.active == True).order_by(ServiceCatalog.name).all()
-    return templates.TemplateResponse('surveys.html', ctx(request, db, rows=rows, responses=responses, services=services))
+    return templates.TemplateResponse('surveys.html', ctx(request, db, rows=rows, survey_items=survey_items, responses=responses, services=services, stats=stats))
 
 
 @router.post('/surveys/new')
@@ -134,6 +192,31 @@ def survey_new(request: Request, name: str = Form(...), service_id: str = Form('
     row = SurveyTemplate(name=name.strip()[:180], service_id=int(service_id) if service_id else None, questions_json=json.dumps(qs, ensure_ascii=False), active=True)
     db.add(row); db.commit(); db.refresh(row)
     audit(db, request, u, 'survey.create', entity_type='survey', entity_id=row.id, details=row.name)
+    return RedirectResponse('/surveys', 303)
+
+
+@router.post('/surveys/{survey_id}/update')
+def survey_update(survey_id: int, request: Request, name: str = Form(...), service_id: str = Form(''), questions: str = Form(...), db: Session = Depends(get_db)):
+    u = _user(request, db)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not has_permission(u, 'survey.manage'):
+        return forbidden(request, db, u, 'survey.manage')
+    row = db.get(SurveyTemplate, survey_id)
+    if not row:
+        return RedirectResponse('/surveys', 303)
+    qs = _survey_questions(questions)
+    if not qs:
+        return RedirectResponse('/surveys', 303)
+    new_name = name.strip()[:180]
+    duplicate = db.query(SurveyTemplate.id).filter(SurveyTemplate.name == new_name, SurveyTemplate.id != row.id).first()
+    if duplicate:
+        return RedirectResponse('/surveys?error=name_exists', 303)
+    row.name = new_name
+    row.service_id = int(service_id) if service_id else None
+    row.questions_json = json.dumps(qs, ensure_ascii=False)
+    db.commit()
+    audit(db, request, u, 'survey.update', entity_type='survey', entity_id=row.id, details=row.name)
     return RedirectResponse('/surveys', 303)
 
 
@@ -182,6 +265,8 @@ async def ticket_survey_submit(ticket_id: int, request: Request, db: Session = D
     answers = {}; ratings = []
     for idx, q in enumerate(questions):
         value = str(form.get(f'q_{idx}', '')).strip()
+        if q.get('required', q.get('type') != 'text') and not value:
+            return RedirectResponse(f'/tickets/{ticket.id}/survey?error=required', 303)
         answers[str(idx)] = value
         if q.get('type') == 'rating':
             try:

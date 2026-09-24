@@ -206,7 +206,7 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "categories": bool(user and has_permission(user, "settings.manage")),
         "labor": bool(user and has_permission(user, "labor.report")),
         "resources": bool(user and has_permission(user, "resource.view")),
-        "surveys": bool(user and (has_permission(user, "survey.manage") or has_permission(user, "survey.respond"))),
+        "surveys": bool(user and has_permission(user, "survey.manage")),
         "subscriptions": bool(user and has_permission(user, "subscription.self")),
         "itsm": bool(user and has_permission(user, "itsm.view")),
         "sla_calendars": bool(user and has_permission(user, "sla.manage")),

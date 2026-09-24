@@ -1,5 +1,223 @@
-{% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">SERVICE DESK</div><h1>Анкеты качества</h1><p>Настраиваемые опросы после выполнения заявок.</p></div></div>
-{% if can('survey.manage') %}<div class="grid2"><section class="panel"><h2>Новая анкета</h2><form class="form" method="post" action="/surveys/new"><label>Название<input name="name" required placeholder="Качество обслуживания"></label><label>Сервис<select name="service_id"><option value="">Для всех сервисов</option>{% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><label>Вопросы<textarea name="questions" rows="8" required placeholder="rating|Оцените качество работ\nyesno|Проблема решена полностью?\ntext|Что можно улучшить?"></textarea></label><p class="muted">Формат: <code>rating|</code> — оценка 1–5, <code>yesno|</code> — да/нет, <code>text|</code> — текстовый ответ.</p><button class="btn primary">Создать анкету</button></form></section><section class="panel"><h2>Активные анкеты</h2><div class="stack-list">{% for x in rows %}<div class="stack-row"><div><b>{{x.name}}</b><small>{{x.service.name if x.service else 'Все сервисы'}} · создана {{fmt_dt(x.created_at)}}</small></div><form method="post" action="/surveys/{{x.id}}/toggle"><button class="btn">{% if x.active %}Отключить{% else %}Включить{% endif %}</button></form></div>{% else %}<p class="muted">Анкет пока нет.</p>{% endfor %}</div></section></div>
-<section class="panel"><div class="panelhead"><div><h2>Последние ответы</h2><p class="muted">До 200 последних анкет</p></div></div><table class="responsive-table"><thead><tr><th>Дата</th><th>Анкета</th><th>Заявка</th><th>Пользователь</th><th>Оценка</th></tr></thead><tbody>{% for r in responses %}<tr><td>{{fmt_dt(r.created_at)}}</td><td>{{r.survey.name}}</td><td><a href="/tickets/{{r.ticket_id}}">{{r.ticket.number}}</a></td><td>{{r.user.full_name if r.user else '—'}}</td><td><b>{{r.score}}</b> / 5</td></tr>{% else %}<tr><td colspan="5" class="empty-row">Ответов пока нет.</td></tr>{% endfor %}</tbody></table></section>{% else %}<section class="panel"><p class="muted">Анкета появляется в карточке выполненной заявки, если для неё настроен опрос.</p></section>{% endif %}
+{% extends "base.html" %}
+{% block title %}Оценка качества — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead survey-pagehead">
+  <div>
+    <div class="eyebrow">SERVICE DESK / КАЧЕСТВО</div>
+    <h1>Оценка качества</h1>
+    <p>Настройте короткую анкету, которую заявитель увидит после выполнения заявки. Никаких технических форматов — вопросы собираются визуально.</p>
+  </div>
+</div>
+
+{% if can('survey.manage') %}
+<div class="survey-stats-grid">
+  <div class="survey-stat-card"><span>Активные анкеты</span><strong>{{ stats.active }}</strong><small>используются после закрытия заявок</small></div>
+  <div class="survey-stat-card"><span>Получено ответов</span><strong>{{ stats.responses }}</strong><small>за всё время</small></div>
+  <div class="survey-stat-card"><span>Средняя оценка</span><strong>{% if stats.responses %}{{ stats.avg_score }} / 5{% else %}—{% endif %}</strong><small>по вопросам со звёздной оценкой</small></div>
+</div>
+
+<div class="survey-builder-layout">
+  <section class="panel survey-builder-card" id="survey-builder-card">
+    <div class="panelhead survey-builder-head">
+      <div>
+        <div class="builder-kicker" id="survey-builder-kicker">Новая анкета</div>
+        <h2 id="survey-builder-title">Создать анкету качества</h2>
+        <p class="muted">Шаг 1 — название и область применения. Шаг 2 — вопросы. FMTS сам сохранит структуру.</p>
+      </div>
+      <button class="btn ghost hidden" type="button" id="survey-cancel-edit">Отменить редактирование</button>
+    </div>
+
+    <form id="survey-builder-form" class="survey-builder-form" method="post" action="/surveys/new">
+      <input type="hidden" name="questions" id="survey-questions-json">
+      <div class="survey-builder-section">
+        <div class="survey-step-badge">1</div>
+        <div class="survey-step-body">
+          <div class="survey-step-title">Основные настройки</div>
+          <div class="survey-settings-grid">
+            <label>Название анкеты
+              <input id="survey-name" name="name" required maxlength="180" placeholder="Например: Качество обслуживания">
+            </label>
+            <label>Для каких заявок
+              <select id="survey-service" name="service_id">
+                <option value="">Для всех сервисов</option>
+                {% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="survey-hint-box"><span>i</span><p>Если выбрать конкретный сервис, анкета будет показываться только для заявок этого сервиса. Если оставить «Для всех сервисов» — она станет общей.</p></div>
+        </div>
+      </div>
+
+      <div class="survey-builder-section">
+        <div class="survey-step-badge">2</div>
+        <div class="survey-step-body">
+          <div class="survey-step-title-row">
+            <div><div class="survey-step-title">Вопросы</div><p class="muted">Добавляйте, меняйте местами и удаляйте вопросы обычными кнопками.</p></div>
+            <button class="btn" type="button" id="survey-add-question">＋ Добавить вопрос</button>
+          </div>
+          <div class="survey-presets">
+            <span>Быстрый шаблон:</span>
+            <button type="button" data-survey-preset="short">Короткая оценка</button>
+            <button type="button" data-survey-preset="resolved">Решение проблемы</button>
+            <button type="button" data-survey-preset="detailed">Подробная обратная связь</button>
+          </div>
+          <div id="survey-question-list" class="survey-question-builder-list"></div>
+        </div>
+      </div>
+
+      <div class="survey-builder-footer">
+        <div class="survey-builder-summary"><span>Анкета после выполнения заявки</span><b id="survey-question-count">0 вопросов</b></div>
+        <button class="btn primary" id="survey-submit-button" type="submit">Создать анкету</button>
+      </div>
+    </form>
+  </section>
+
+  <aside class="panel survey-preview-card">
+    <div class="panelhead"><div><div class="builder-kicker">Предпросмотр</div><h2>Как это увидит заявитель</h2></div></div>
+    <div class="survey-preview-shell">
+      <div class="survey-preview-ticket"><span>✓ Заявка выполнена</span><b id="survey-preview-name">Качество обслуживания</b></div>
+      <div id="survey-preview-list" class="survey-preview-list"></div>
+      <button class="btn primary survey-preview-submit" type="button" disabled>Отправить оценку</button>
+    </div>
+  </aside>
+</div>
+
+<section class="panel survey-existing-panel">
+  <div class="panelhead">
+    <div><h2>Настроенные анкеты</h2><p class="muted">Управление шаблонами без технических JSON и строковых форматов.</p></div>
+    <span class="survey-count-pill">{{ survey_items|length }}</span>
+  </div>
+  <div class="survey-template-grid">
+    {% for item in survey_items %}{% set x=item.row %}
+    <article class="survey-template-card {% if not x.active %}inactive{% endif %}">
+      <div class="survey-template-top">
+        <div>
+          <div class="survey-template-status {% if x.active %}active{% else %}off{% endif %}">{% if x.active %}● Активна{% else %}● Отключена{% endif %}</div>
+          <h3>{{x.name}}</h3>
+          <p>{{x.service.name if x.service else 'Для всех сервисов'}}</p>
+        </div>
+        <div class="survey-template-score"><span>Ответов</span><b>{{item.response_count}}</b><small>{% if item.response_count %}средняя {{item.avg_score}} / 5{% else %}пока нет{% endif %}</small></div>
+      </div>
+      <div class="survey-template-questions">
+        {% for q in item.questions[:4] %}
+        <div><span class="survey-type-icon {{q.type}}">{% if q.type=='rating' %}★{% elif q.type=='yesno' %}✓{% else %}≡{% endif %}</span><b>{{q.label}}</b>{% if q.required %}<small>обязательный</small>{% endif %}</div>
+        {% endfor %}
+        {% if item.questions|length > 4 %}<div class="survey-more-questions">＋ ещё {{item.questions|length - 4}}</div>{% endif %}
+      </div>
+      <div class="survey-template-actions">
+        <button type="button" class="btn survey-edit-button" data-survey='{{ {"id":x.id,"name":x.name,"service_id":x.service_id or "","questions":item.questions}|tojson|forceescape }}'>✎ Редактировать</button>
+        <form method="post" action="/surveys/{{x.id}}/toggle"><button class="btn {% if x.active %}danger-soft{% else %}success-soft{% endif %}" type="submit">{% if x.active %}Отключить{% else %}Включить{% endif %}</button></form>
+      </div>
+    </article>
+    {% else %}
+    <div class="survey-empty-state"><div>☆</div><h3>Анкет пока нет</h3><p>Создайте первую короткую анкету. Для начала достаточно 2–3 вопросов.</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel survey-responses-panel">
+  <div class="panelhead"><div><h2>Последние ответы</h2><p class="muted">До 200 последних оценок качества</p></div></div>
+  <table class="responsive-table survey-response-table">
+    <thead><tr><th>Дата</th><th>Анкета</th><th>Заявка</th><th>Пользователь</th><th>Оценка</th></tr></thead>
+    <tbody>{% for r in responses %}<tr><td>{{fmt_dt(r.created_at)}}</td><td><b>{{r.survey.name}}</b></td><td><a href="/tickets/{{r.ticket_id}}">{{r.ticket.number}}</a></td><td>{{r.user.full_name if r.user else '—'}}</td><td><span class="survey-score-badge">★ {{r.score}} / 5</span></td></tr>{% else %}<tr><td colspan="5" class="empty-row">Ответов пока нет. Они появятся после закрытия заявок и заполнения анкеты.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+
+<script>
+(function(){
+  const form=document.getElementById('survey-builder-form');
+  if(!form) return;
+  const list=document.getElementById('survey-question-list');
+  const preview=document.getElementById('survey-preview-list');
+  const hidden=document.getElementById('survey-questions-json');
+  const nameInput=document.getElementById('survey-name');
+  const serviceSelect=document.getElementById('survey-service');
+  const countEl=document.getElementById('survey-question-count');
+  const previewName=document.getElementById('survey-preview-name');
+  const addBtn=document.getElementById('survey-add-question');
+  const submitBtn=document.getElementById('survey-submit-button');
+  const cancelEdit=document.getElementById('survey-cancel-edit');
+  const title=document.getElementById('survey-builder-title');
+  const kicker=document.getElementById('survey-builder-kicker');
+
+  const presets={
+    short:[
+      {type:'rating',label:'Оцените качество выполненной работы',required:true},
+      {type:'yesno',label:'Проблема решена полностью?',required:true},
+      {type:'text',label:'Комментарий или пожелание',required:false}
+    ],
+    resolved:[
+      {type:'yesno',label:'Проблема решена полностью?',required:true},
+      {type:'rating',label:'Оцените скорость выполнения заявки',required:true},
+      {type:'text',label:'Что осталось нерешённым?',required:false}
+    ],
+    detailed:[
+      {type:'rating',label:'Оцените качество работы',required:true},
+      {type:'rating',label:'Оцените скорость выполнения',required:true},
+      {type:'yesno',label:'Сотрудник объяснил результат работ?',required:true},
+      {type:'yesno',label:'Проблема решена полностью?',required:true},
+      {type:'text',label:'Что можно улучшить?',required:false}
+    ]
+  };
+  let questions=[];
+
+  function typeLabel(type){ return type==='rating'?'Оценка 1–5':(type==='yesno'?'Да / Нет':'Текстовый ответ'); }
+  function escapeHtml(value){ const d=document.createElement('div'); d.textContent=value||''; return d.innerHTML; }
+  function serialize(){ hidden.value=JSON.stringify(questions.slice(0,30)); }
+  function plural(n){ const n10=n%10,n100=n%100; return n10===1&&n100!==11?'вопрос':(n10>=2&&n10<=4&&(n100<12||n100>14)?'вопроса':'вопросов'); }
+
+  function render(){
+    list.innerHTML=''; preview.innerHTML='';
+    questions.forEach((q,i)=>{
+      const row=document.createElement('div'); row.className='survey-builder-question';
+      row.innerHTML=`<div class="survey-question-order">${i+1}</div><div class="survey-question-main"><div class="survey-question-row"><select class="survey-q-type" aria-label="Тип вопроса"><option value="rating" ${q.type==='rating'?'selected':''}>★ Оценка 1–5</option><option value="yesno" ${q.type==='yesno'?'selected':''}>✓ Да / Нет</option><option value="text" ${q.type==='text'?'selected':''}>≡ Текстовый ответ</option></select><input class="survey-q-label" maxlength="500" value="${escapeHtml(q.label)}" placeholder="Введите вопрос"><label class="survey-required-toggle"><input type="checkbox" class="survey-q-required" ${q.required?'checked':''}><span>Обязательный</span></label></div><div class="survey-question-actions"><button type="button" class="icon-btn survey-up" title="Выше">↑</button><button type="button" class="icon-btn survey-down" title="Ниже">↓</button><button type="button" class="icon-btn survey-duplicate" title="Дублировать">⧉</button><button type="button" class="icon-btn danger survey-delete" title="Удалить">×</button></div></div>`;
+      row.querySelector('.survey-q-type').addEventListener('change',e=>{q.type=e.target.value; render();});
+      row.querySelector('.survey-q-label').addEventListener('input',e=>{q.label=e.target.value; serialize(); renderPreview();});
+      row.querySelector('.survey-q-required').addEventListener('change',e=>{q.required=e.target.checked; serialize(); renderPreview();});
+      row.querySelector('.survey-up').addEventListener('click',()=>{if(i>0){[questions[i-1],questions[i]]=[questions[i],questions[i-1]];render();}});
+      row.querySelector('.survey-down').addEventListener('click',()=>{if(i<questions.length-1){[questions[i+1],questions[i]]=[questions[i],questions[i+1]];render();}});
+      row.querySelector('.survey-duplicate').addEventListener('click',()=>{if(questions.length<30){questions.splice(i+1,0,{...q,label:q.label+' — копия'});render();}});
+      row.querySelector('.survey-delete').addEventListener('click',()=>{questions.splice(i,1);render();});
+      list.appendChild(row);
+    });
+    if(!questions.length){ list.innerHTML='<div class="survey-builder-empty"><b>Добавьте первый вопрос</b><span>Начните с оценки 1–5 или выберите готовый шаблон выше.</span></div>'; }
+    serialize(); renderPreview();
+    countEl.textContent=`${questions.length} ${plural(questions.length)}`;
+  }
+
+  function renderPreview(){
+    preview.innerHTML='';
+    questions.forEach((q,i)=>{
+      const card=document.createElement('div'); card.className='survey-preview-question';
+      const req=q.required?'<em>обязательно</em>':'';
+      let control='';
+      if(q.type==='rating') control='<div class="survey-preview-stars">☆ ☆ ☆ ☆ ☆</div>';
+      else if(q.type==='yesno') control='<div class="survey-preview-yesno"><span>Да</span><span>Нет</span></div>';
+      else control='<div class="survey-preview-text">Ваш ответ…</div>';
+      card.innerHTML=`<div><b>${i+1}. ${escapeHtml(q.label||'Новый вопрос')}</b>${req}</div>${control}`;
+      preview.appendChild(card);
+    });
+    if(!questions.length) preview.innerHTML='<div class="survey-preview-empty">Здесь появится предпросмотр вопросов.</div>';
+    previewName.textContent=nameInput.value.trim()||'Качество обслуживания';
+  }
+
+  function resetBuilder(){
+    form.action='/surveys/new'; nameInput.value=''; serviceSelect.value=''; questions=presets.short.map(q=>({...q}));
+    title.textContent='Создать анкету качества'; kicker.textContent='Новая анкета'; submitBtn.textContent='Создать анкету'; cancelEdit.classList.add('hidden'); render(); nameInput.focus();
+  }
+  addBtn.addEventListener('click',()=>{if(questions.length<30){questions.push({type:'rating',label:'',required:true});render(); const inputs=list.querySelectorAll('.survey-q-label'); inputs[inputs.length-1]?.focus();}});
+  document.querySelectorAll('[data-survey-preset]').forEach(btn=>btn.addEventListener('click',()=>{questions=presets[btn.dataset.surveyPreset].map(q=>({...q}));render();}));
+  document.querySelectorAll('.survey-edit-button').forEach(btn=>btn.addEventListener('click',()=>{
+    const data=JSON.parse(btn.dataset.survey); form.action=`/surveys/${data.id}/update`; nameInput.value=data.name||''; serviceSelect.value=String(data.service_id||''); questions=(data.questions||[]).map(q=>({type:q.type||'rating',label:q.label||'',required:q.required!==false}));
+    title.textContent='Редактирование анкеты'; kicker.textContent='Настройка'; submitBtn.textContent='Сохранить изменения'; cancelEdit.classList.remove('hidden'); render(); document.getElementById('survey-builder-card').scrollIntoView({behavior:'smooth',block:'start'});
+  }));
+  cancelEdit.addEventListener('click',resetBuilder);
+  nameInput.addEventListener('input',renderPreview);
+  form.addEventListener('submit',e=>{questions=questions.filter(q=>q.label.trim()); if(!questions.length){e.preventDefault(); alert('Добавьте хотя бы один вопрос.'); return;} serialize();});
+  resetBuilder();
+})();
+</script>
+{% else %}
+<section class="panel"><div class="survey-empty-state"><div>☆</div><h2>Анкета качества</h2><p>После выполнения вашей заявки FMTS предложит коротко оценить результат работы. Отдельно настраивать ничего не нужно.</p></div></section>
+{% endif %}
 {% endblock %}

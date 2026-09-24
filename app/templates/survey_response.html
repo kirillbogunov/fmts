@@ -1,4 +1,20 @@
-{% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">QUALITY</div><h1>Оценка заявки {{ticket.number}}</h1><p>{{ticket.title}}</p></div><a class="btn" href="/tickets/{{ticket.id}}">← К заявке</a></div>
-<section class="panel survey-card">{% if message %}<div class="alert">{{message}}</div>{% elif existing %}<div class="survey-success"><strong>Спасибо за обратную связь</strong><p>Анкета уже заполнена. Итоговая оценка: <b>{{existing.score}} / 5</b>.</p></div>{% elif not survey %}<p class="muted">Для этой заявки активная анкета не настроена.</p>{% else %}<h2>{{survey.name}}</h2><form class="form survey-form" method="post">{% for q in questions %}<div class="survey-question"><label>{{loop.index}}. {{q.label}}</label>{% if q.type=='rating' %}{% set qidx=loop.index0 %}<div class="rating-input">{% for n in range(1,6) %}<label><input type="radio" name="q_{{qidx}}" value="{{n}}" required><span>★</span><small>{{n}}</small></label>{% endfor %}</div>{% elif q.type=='yesno' %}<select name="q_{{loop.index0}}" required><option value="">Выберите</option><option value="Да">Да</option><option value="Нет">Нет</option></select>{% else %}<textarea name="q_{{loop.index0}}" rows="3"></textarea>{% endif %}</div>{% endfor %}<button class="btn primary">Отправить анкету</button></form>{% endif %}</section>
+{% extends "base.html" %}
+{% block title %}Оценка работы — {{app_name}}{% endblock %}
+{% block content %}
+<div class="pagehead"><div><div class="eyebrow">КАЧЕСТВО ОБСЛУЖИВАНИЯ</div><h1>Оцените выполненную работу</h1><p>Заявка {{ticket.number}} · {{ticket.title}}</p></div></div>
+<section class="panel survey-card survey-public-card">
+{% if message %}<div class="alert">{{message}}</div>
+{% elif existing %}<div class="survey-success"><div class="survey-success-icon">✓</div><strong>Спасибо за обратную связь</strong><p>Анкета уже заполнена. Итоговая оценка: <b>{{existing.score}} / 5</b>.</p><a class="btn" href="/tickets/{{ticket.id}}">Вернуться к заявке</a></div>
+{% elif not survey %}<div class="survey-empty-state"><div>☆</div><h3>Анкета не настроена</h3><p>Для этой заявки активная анкета качества пока не назначена.</p></div>
+{% else %}
+<div class="survey-public-head"><span>✓ Заявка выполнена</span><h2>{{survey.name}}</h2><p>Это займёт меньше минуты и поможет улучшить качество обслуживания.</p></div>
+<form class="form survey-form" method="post">
+{% for q in questions %}<div class="survey-question"><div class="survey-question-label"><b>{{loop.index}}. {{q.label}}</b>{% if q.required is not defined or q.required %}<span>Обязательный</span>{% endif %}</div>
+{% if q.type=='rating' %}{% set qidx=loop.index0 %}<div class="rating-input">{% for n in range(1,6) %}<label><input type="radio" name="q_{{qidx}}" value="{{n}}" {% if q.required is not defined or q.required %}required{% endif %}><span>★</span><small>{{n}}</small></label>{% endfor %}</div>
+{% elif q.type=='yesno' %}<div class="survey-public-yesno"><label><input type="radio" name="q_{{loop.index0}}" value="Да" {% if q.required is not defined or q.required %}required{% endif %}><span>Да</span></label><label><input type="radio" name="q_{{loop.index0}}" value="Нет" {% if q.required is not defined or q.required %}required{% endif %}><span>Нет</span></label></div>
+{% else %}<textarea name="q_{{loop.index0}}" rows="4" placeholder="Напишите ответ..." {% if q.required %}required{% endif %}></textarea>{% endif %}</div>{% endfor %}
+<div class="survey-public-actions"><button class="btn primary">Отправить оценку</button><a class="btn" href="/tickets/{{ticket.id}}">Вернуться без оценки</a></div>
+</form>
+{% endif %}
+</section>
 {% endblock %}
