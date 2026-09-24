@@ -32,9 +32,15 @@
         <div class="sla-step-number">1</div>
         <div class="sla-step-content">
           <h3>Название и часовой пояс</h3>
-          <div class="sla-two-col">
-            <label>Название календаря<input name="name" required placeholder="Например: Основной график"></label>
-            <label>Часовой пояс
+          <div class="sla-two-col sla-identity-grid">
+            <label class="sla-field">
+              <span class="sla-field-label">Название календаря</span>
+              <span class="sla-field-help">Например, «Основной график» или «Склад 24/7»</span>
+              <input class="sla-text-control" name="name" required placeholder="Основной график" autocomplete="off">
+            </label>
+            <div class="sla-field">
+              <span class="sla-field-label">Часовой пояс</span>
+              <span class="sla-field-help">Нужен для точного расчёта рабочих часов и SLA</span>
               <div class="timezone-picker" data-timezone-picker data-initial="{{user.timezone or 'Asia/Almaty'}}">
                 <input type="hidden" name="timezone" value="{{user.timezone or 'Asia/Almaty'}}" data-timezone-value>
                 <button class="timezone-trigger" type="button" data-timezone-trigger aria-haspopup="listbox" aria-expanded="false">
@@ -47,7 +53,7 @@
                 </div>
               </div>
               <small class="field-hint">Доступны все часовые пояса IANA. Начните вводить город, регион или UTC-смещение.</small>
-            </label>
+            </div>
           </div>
         </div>
       </div>
@@ -114,9 +120,13 @@
         </div>
 
         <form class="sla-calendar-edit" id="calendar-edit-{{c.id}}" method="post" action="/sla-calendars/{{c.id}}/update" data-sla-form hidden>
-          <div class="sla-edit-grid">
-            <label>Название<input name="name" value="{{c.name}}" required></label>
-            <label>Часовой пояс
+          <div class="sla-edit-grid sla-edit-identity-grid">
+            <label class="sla-field">
+              <span class="sla-field-label">Название календаря</span>
+              <input class="sla-text-control" name="name" value="{{c.name}}" required autocomplete="off">
+            </label>
+            <div class="sla-field">
+              <span class="sla-field-label">Часовой пояс</span>
               <div class="timezone-picker compact" data-timezone-picker data-initial="{{c.timezone}}">
                 <input type="hidden" name="timezone" value="{{c.timezone}}" data-timezone-value>
                 <button class="timezone-trigger" type="button" data-timezone-trigger aria-haspopup="listbox" aria-expanded="false">
@@ -128,7 +138,7 @@
                   <div class="timezone-options" data-timezone-options role="listbox"></div>
                 </div>
               </div>
-            </label>
+            </div>
           </div>
 
           <input type="hidden" name="weekdays" value="{{c.weekdays}}" data-weekdays-output>
