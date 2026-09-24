@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, qrcode, mimetypes, secrets
+import json, qrcode, mimetypes, secrets, csv, io
 from collections import defaultdict
 from datetime import datetime, timedelta, date
 from io import BytesIO
@@ -20,6 +20,7 @@ from app.services.audit import audit
 from app.services.notifications import notify_user, send_webpush
 from app.services.smart_search import rank_search
 from app.services.categories import category_options
+from app.labels import STATUS_LABELS
 
 router=APIRouter()
 settings=get_settings()
@@ -387,35 +388,212 @@ def saved_filter_apply(filter_id:int,request:Request,db:Session=Depends(get_db))
     return RedirectResponse('/tickets?'+urlencode(_json(row.filters_json,{})),303)
 
 # ---------- Report builder ----------
-@router.get('/reports/builder',response_class=HTMLResponse)
-def report_builder(request:Request,group_by:str='site',days:int=30,db:Session=Depends(get_db)):
-    u=user_or_login(request,db)
-    if not u:return RedirectResponse('/login',303)
-    denied=_require(request,db,u,'report.builder')
-    if denied:return denied
-    since=datetime.utcnow()-timedelta(days=max(1,min(days,3650)))
-    rows=scope_ticket_query(db.query(Ticket),u).filter(Ticket.created_at>=since).all()
-    agg={}
-    for t in rows:
-        if group_by=='category': key=t.category or '—'
-        elif group_by=='status': key=t.status or '—'
-        elif group_by=='assignee': key=t.assignee.full_name if t.assignee else 'Не назначен'
-        elif group_by=='equipment_category': key=t.equipment.category if t.equipment else 'Без оборудования'
-        else: key=t.site.name if t.site else '—'
-        x=agg.setdefault(key,{'name':key,'count':0,'closed':0,'overdue':0,'labor':0.0,'parts':0.0,'hours':0.0})
-        x['count']+=1; x['closed']+=int(t.status in {'resolved','closed'}); x['overdue']+=int(bool(t.sla_due_at and t.sla_due_at<datetime.utcnow() and t.status not in {'resolved','closed','cancelled','waiting'}))
-        if has_permission(u,'ticket.cost'): x['labor']+=float(t.labor_cost or 0);x['parts']+=float(t.parts_cost or 0)
-        x['hours']+=sum(float(ws.duration_seconds or 0) for ws in t.work_sessions)/3600
-    data=sorted(agg.values(),key=lambda x:(-x['count'],x['name']))
-    return templates.TemplateResponse('report_builder.html',ctx(request,db,rows=data,group_by=group_by,days=days))
+REPORT_GROUP_LABELS = {
+    'site': 'По объектам',
+    'category': 'По категориям',
+    'status': 'По статусам',
+    'assignee': 'По исполнителям',
+    'equipment_category': 'По типам оборудования',
+}
+
+
+def _report_group_key(t: Ticket, group_by: str) -> str:
+    if group_by == 'category':
+        return t.category or 'Без категории'
+    if group_by == 'status':
+        return STATUS_LABELS.get(t.status, t.status or '—')
+    if group_by == 'assignee':
+        return t.assignee.full_name if t.assignee else 'Не назначен'
+    if group_by == 'equipment_category':
+        return t.equipment.category if t.equipment else 'Без оборудования'
+    return t.site.name if t.site else 'Без объекта'
+
+
+def _report_bucket(dt: datetime, days: int):
+    if days <= 60:
+        key = dt.date()
+        return key, key.strftime('%d.%m')
+    if days <= 730:
+        day = dt.date()
+        monday = day - timedelta(days=day.weekday())
+        return monday, monday.strftime('%d.%m')
+    month = date(dt.year, dt.month, 1)
+    return month, month.strftime('%m.%Y')
+
+
+def _build_report_data(db: Session, u: User, group_by: str, days: int):
+    group_by = group_by if group_by in REPORT_GROUP_LABELS else 'site'
+    days = max(1, min(int(days or 30), 3650))
+    now = datetime.utcnow()
+    since = now - timedelta(days=days)
+    tickets = scope_ticket_query(db.query(Ticket), u).filter(Ticket.created_at >= since).all()
+    can_cost = has_permission(u, 'ticket.cost')
+
+    agg = {}
+    status_counts = defaultdict(int)
+    buckets = {}
+    total_hours = 0.0
+    total_labor = 0.0
+    total_parts = 0.0
+    closed_total = 0
+    overdue_total = 0
+    open_total = 0
+    sla_total = 0
+    sla_ok = 0
+    resolution_seconds = 0.0
+    resolution_count = 0
+
+    closed_statuses = {'resolved', 'closed'}
+    open_statuses = {'new', 'assigned', 'in_progress', 'waiting'}
+
+    for t in tickets:
+        status_counts[STATUS_LABELS.get(t.status, t.status or '—')] += 1
+        is_closed = t.status in closed_statuses
+        is_open = t.status in open_statuses
+        is_overdue = bool(t.sla_due_at and t.sla_due_at < now and t.status not in {'resolved', 'closed', 'cancelled', 'waiting'})
+        closed_total += int(is_closed)
+        open_total += int(is_open)
+        overdue_total += int(is_overdue)
+
+        hours = sum(float(ws.duration_seconds or 0) for ws in t.work_sessions) / 3600
+        labor = float(t.labor_cost or 0) if can_cost else 0.0
+        parts = float(t.parts_cost or 0) if can_cost else 0.0
+        total_hours += hours
+        total_labor += labor
+        total_parts += parts
+
+        if t.resolved_at and t.created_at and t.resolved_at >= t.created_at:
+            resolution_seconds += (t.resolved_at - t.created_at).total_seconds()
+            resolution_count += 1
+
+        ticket_sla_ok = None
+        if t.sla_due_at and t.status != 'cancelled':
+            sla_total += 1
+            if is_closed and t.resolved_at:
+                ticket_sla_ok = t.resolved_at <= t.sla_due_at
+            elif not is_overdue:
+                ticket_sla_ok = True
+            else:
+                ticket_sla_ok = False
+            sla_ok += int(bool(ticket_sla_ok))
+
+        key = _report_group_key(t, group_by)
+        x = agg.setdefault(key, {
+            'name': key, 'count': 0, 'closed': 0, 'open': 0, 'overdue': 0,
+            'labor': 0.0, 'parts': 0.0, 'hours': 0.0,
+            'sla_total': 0, 'sla_ok': 0, 'resolution_seconds': 0.0, 'resolution_count': 0,
+        })
+        x['count'] += 1
+        x['closed'] += int(is_closed)
+        x['open'] += int(is_open)
+        x['overdue'] += int(is_overdue)
+        x['hours'] += hours
+        x['labor'] += labor
+        x['parts'] += parts
+        if ticket_sla_ok is not None:
+            x['sla_total'] += 1
+            x['sla_ok'] += int(bool(ticket_sla_ok))
+        if t.resolved_at and t.created_at and t.resolved_at >= t.created_at:
+            x['resolution_seconds'] += (t.resolved_at - t.created_at).total_seconds()
+            x['resolution_count'] += 1
+
+        bucket_key, bucket_label = _report_bucket(t.created_at, days)
+        b = buckets.setdefault(bucket_key, {'label': bucket_label, 'created': 0, 'closed': 0})
+        b['created'] += 1
+        if is_closed:
+            b['closed'] += 1
+
+    data = []
+    for x in agg.values():
+        x['completion_pct'] = round((x['closed'] / x['count'] * 100), 1) if x['count'] else 0
+        x['sla_pct'] = round((x['sla_ok'] / x['sla_total'] * 100), 1) if x['sla_total'] else 0
+        x['avg_resolution_h'] = round((x['resolution_seconds'] / x['resolution_count'] / 3600), 1) if x['resolution_count'] else 0
+        x['total_cost'] = x['labor'] + x['parts']
+        data.append(x)
+    data.sort(key=lambda x: (-x['count'], x['name']))
+
+    trend = [buckets[k] for k in sorted(buckets)]
+    status_chart = [{'name': name, 'value': count} for name, count in sorted(status_counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    top_groups = data[:10]
+    summary = {
+        'total': len(tickets),
+        'open': open_total,
+        'closed': closed_total,
+        'overdue': overdue_total,
+        'completion_pct': round((closed_total / len(tickets) * 100), 1) if tickets else 0,
+        'sla_pct': round((sla_ok / sla_total * 100), 1) if sla_total else 0,
+        'hours': round(total_hours, 1),
+        'labor': round(total_labor, 2),
+        'parts': round(total_parts, 2),
+        'total_cost': round(total_labor + total_parts, 2),
+        'avg_resolution_h': round((resolution_seconds / resolution_count / 3600), 1) if resolution_count else 0,
+        'top_group': data[0]['name'] if data else '—',
+    }
+    return {
+        'rows': data,
+        'summary': summary,
+        'trend': trend,
+        'status_chart': status_chart,
+        'top_groups': top_groups,
+        'days': days,
+        'group_by': group_by,
+        'group_label': REPORT_GROUP_LABELS[group_by],
+        'can_cost': can_cost,
+    }
+
+
+@router.get('/reports/builder', response_class=HTMLResponse)
+def report_builder(request: Request, group_by: str = 'site', days: int = 30, db: Session = Depends(get_db)):
+    u = user_or_login(request, db)
+    if not u:
+        return RedirectResponse('/login', 303)
+    denied = _require(request, db, u, 'report.builder')
+    if denied:
+        return denied
+    report = _build_report_data(db, u, group_by, days)
+    subscriptions = db.query(ReportSubscription).filter(ReportSubscription.user_id == u.id).order_by(ReportSubscription.id.desc()).limit(20).all()
+    return templates.TemplateResponse('report_builder.html', ctx(request, db, report=report, rows=report['rows'], group_by=report['group_by'], days=report['days'], subscriptions=subscriptions))
+
+
+@router.get('/reports/builder.csv')
+def report_builder_csv(request: Request, group_by: str = 'site', days: int = 30, db: Session = Depends(get_db)):
+    u = user_or_login(request, db)
+    if not u:
+        return RedirectResponse('/login', 303)
+    denied = _require(request, db, u, 'report.builder')
+    if denied:
+        return denied
+    report = _build_report_data(db, u, group_by, days)
+    out = io.StringIO()
+    writer = csv.writer(out, delimiter=';', lineterminator='\n')
+    header = ['Группа', 'Заявок', 'Выполнено', 'Выполнение %', 'Открыто', 'Просрочено', 'SLA %', 'Среднее решение, ч', 'Трудозатраты, ч']
+    if report['can_cost']:
+        header += ['Работы, ₸', 'Материалы, ₸', 'Итого, ₸']
+    writer.writerow(header)
+    for row in report['rows']:
+        values = [row['name'], row['count'], row['closed'], row['completion_pct'], row['open'], row['overdue'], row['sla_pct'], row['avg_resolution_h'], round(row['hours'], 1)]
+        if report['can_cost']:
+            values += [round(row['labor'], 2), round(row['parts'], 2), round(row['total_cost'], 2)]
+        writer.writerow(values)
+    payload = '\ufeff' + out.getvalue()
+    filename = f'FMTS_report_{report["group_by"]}_{report["days"]}d.csv'
+    return Response(payload, media_type='text/csv; charset=utf-8', headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
 
 @router.post('/reports/subscriptions/new')
-def report_subscription_new(request:Request,name:str=Form(...),group_by:str=Form('site'),periodicity:str=Form('monthly'),db:Session=Depends(get_db)):
-    u=user_or_login(request,db)
-    if not u:return RedirectResponse('/login',303)
-    if not has_permission(u,'report.builder'):return forbidden(request,db,u,'report.builder')
-    db.add(ReportSubscription(user_id=u.id,name=name,config_json=json.dumps({'group_by':group_by}),periodicity=periodicity));db.commit()
-    return RedirectResponse(f'/reports/builder?group_by={group_by}',303)
+def report_subscription_new(request: Request, name: str = Form(...), group_by: str = Form('site'), periodicity: str = Form('monthly'), days: int = Form(30), db: Session = Depends(get_db)):
+    u = user_or_login(request, db)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not has_permission(u, 'report.builder'):
+        return forbidden(request, db, u, 'report.builder')
+    group_by = group_by if group_by in REPORT_GROUP_LABELS else 'site'
+    days = max(1, min(int(days or 30), 3650))
+    if periodicity not in {'daily', 'weekly', 'monthly'}:
+        periodicity = 'monthly'
+    db.add(ReportSubscription(user_id=u.id, name=name.strip(), config_json=json.dumps({'group_by': group_by, 'days': days}, ensure_ascii=False), periodicity=periodicity))
+    db.commit()
+    return RedirectResponse(f'/reports/builder?group_by={group_by}&days={days}#report-subscriptions', 303)
 
 # ---------- Ticket links, custom fields, approvals, feedback ----------
 @router.post('/tickets/{ticket_id}/links')

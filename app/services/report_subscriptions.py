@@ -49,16 +49,20 @@ def process_report_subscriptions(db:Session)->int:
         user=db.get(User,sub.user_id)
         if not user or not user.active or not user.email or not _due(sub.periodicity, sub.last_sent_at, now):
             continue
-        q=scope_ticket_query(db.query(Ticket), user)
-        open_count=q.filter(Ticket.status.in_(OPEN)).count()
-        overdue=q.filter(Ticket.status.in_({'new','assigned','in_progress'}),Ticket.sla_due_at<now).count()
-        total=q.count()
         cfg={}
         try: cfg=json.loads(sub.config_json or '{}')
         except Exception: pass
+        try: days=max(1,min(int(cfg.get('days',30) or 30),3650))
+        except Exception: days=30
+        q=scope_ticket_query(db.query(Ticket), user).filter(Ticket.created_at >= now-timedelta(days=days))
+        open_count=q.filter(Ticket.status.in_(OPEN)).count()
+        overdue=q.filter(Ticket.status.in_({'new','assigned','in_progress'}),Ticket.sla_due_at<now).count()
+        resolved=q.filter(Ticket.status.in_({'resolved','closed'})).count()
+        total=q.count()
         body=(f'Отчёт FMTS: {sub.name}\n'
-              f'Всего заявок в области доступа: {total}\n'
-              f'Открыто: {open_count}\nПросрочено: {overdue}\n'
+              f'Период: последние {days} дн.\n'
+              f'Всего заявок: {total}\n'
+              f'Открыто: {open_count}\nВыполнено: {resolved}\nПросрочено: {overdue}\n'
               f'Группировка: {cfg.get("group_by","site")}\n')
         if send_email(user.email,f'FMTS — {sub.name}',body):
             sub.last_sent_at=now; sent+=1

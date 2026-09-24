@@ -1,1 +1,124 @@
-{% extends "base.html" %}{% block content %}<div class="pagehead"><div><div class="eyebrow">ANALYTICS</div><h1>Конструктор отчётов</h1><p>Срезы по объектам, категориям, исполнителям и оборудованию.</p></div></div><form class="filters" method="get"><select name="group_by"><option value="site" {% if group_by=='site' %}selected{% endif %}>По объектам</option><option value="category" {% if group_by=='category' %}selected{% endif %}>По категориям</option><option value="status" {% if group_by=='status' %}selected{% endif %}>По статусам</option><option value="assignee" {% if group_by=='assignee' %}selected{% endif %}>По исполнителям</option><option value="equipment_category" {% if group_by=='equipment_category' %}selected{% endif %}>По типам оборудования</option></select><input type="number" name="days" value="{{days}}" min="1" max="3650"><button class="btn">Построить</button></form><section class="panel"><table class="responsive-table"><thead><tr><th>Группа</th><th>Заявок</th><th>Выполнено</th><th>Просрочено сейчас</th><th>Часы</th>{% if can('ticket.cost') %}<th>Работы</th><th>Материалы</th><th>Итого</th>{% endif %}</tr></thead><tbody>{% for r in rows %}<tr><td><b>{{r.name}}</b></td><td>{{r.count}}</td><td>{{r.closed}}</td><td>{{r.overdue}}</td><td>{{'%.1f'|format(r.hours)}}</td>{% if can('ticket.cost') %}<td>{{'%.0f'|format(r.labor)}} ₸</td><td>{{'%.0f'|format(r.parts)}} ₸</td><td><b>{{'%.0f'|format(r.labor+r.parts)}} ₸</b></td>{% endif %}</tr>{% endfor %}</tbody></table></section><section class="panel"><h2>Подписка на отчёт</h2><form class="inline-form" method="post" action="/reports/subscriptions/new"><input name="name" required placeholder="Название подписки"><input type="hidden" name="group_by" value="{{group_by}}"><select name="periodicity"><option value="weekly">Еженедельно</option><option value="monthly">Ежемесячно</option></select><button class="btn">Создать подписку</button></form><p class="muted">Рассылка выполняется на e-mail пользователя при настроенном SMTP.</p></section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Конструктор отчётов — {{ app_name }}{% endblock %}
+{% block extra_head %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>{% endblock %}
+{% block content %}
+<div class="pagehead report-v8-head">
+  <div>
+    <div class="eyebrow">ANALYTICS / REPORT STUDIO</div>
+    <h1>Конструктор отчётов</h1>
+    <p>Заявки, SLA, трудозатраты и стоимость в одном интерактивном аналитическом экране.</p>
+  </div>
+  <div class="pagehead-actions">
+    <a class="btn" href="/reports/builder.csv?group_by={{group_by}}&days={{days}}"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#download"></use></svg> CSV для Excel</a>
+    <a class="btn primary" href="#report-subscriptions"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#mail"></use></svg> Подписка на отчёт</a>
+  </div>
+</div>
+
+<section class="panel report-control-deck">
+  <form class="report-control-form" method="get">
+    <div class="report-control-main">
+      <label><span>Группировка</span><select name="group_by"><option value="site" {% if group_by=='site' %}selected{% endif %}>По объектам</option><option value="category" {% if group_by=='category' %}selected{% endif %}>По категориям</option><option value="status" {% if group_by=='status' %}selected{% endif %}>По статусам</option><option value="assignee" {% if group_by=='assignee' %}selected{% endif %}>По исполнителям</option><option value="equipment_category" {% if group_by=='equipment_category' %}selected{% endif %}>По типам оборудования</option></select></label>
+      <label><span>Период, дней</span><input type="number" name="days" value="{{days}}" min="1" max="3650" inputmode="numeric"></label>
+      <button class="btn primary" type="submit"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#chart"></use></svg> Построить</button>
+    </div>
+    <div class="report-period-presets" aria-label="Быстрый выбор периода">
+      <span>Быстро:</span>
+      {% for d,label in [(7,'7 дней'),(30,'30 дней'),(90,'90 дней'),(365,'1 год')] %}<a class="report-period-chip {% if days==d %}active{% endif %}" href="/reports/builder?group_by={{group_by}}&days={{d}}">{{label}}</a>{% endfor %}
+    </div>
+  </form>
+  <div class="report-scope-note"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#info"></use></svg><div><b>{{report.group_label}}</b><span>Анализ за последние {{days}} дн. · данные ограничены правами текущего пользователя</span></div></div>
+</section>
+
+<section class="report-kpi-grid">
+  <article class="report-kpi-card"><div class="report-kpi-icon blue"><svg class="ui-icon"><use href="/static/icons.svg#tickets"></use></svg></div><div><span>Всего заявок</span><strong>{{report.summary.total}}</strong><small>{{report.group_label|lower}}</small></div></article>
+  <article class="report-kpi-card"><div class="report-kpi-icon cyan"><svg class="ui-icon"><use href="/static/icons.svg#clock"></use></svg></div><div><span>Открыто</span><strong>{{report.summary.open}}</strong><small>требуют работы сейчас</small></div></article>
+  <article class="report-kpi-card"><div class="report-kpi-icon green"><svg class="ui-icon"><use href="/static/icons.svg#check"></use></svg></div><div><span>Выполнено</span><strong>{{report.summary.closed}}</strong><small>{{report.summary.completion_pct}}% от всех заявок</small></div></article>
+  <article class="report-kpi-card danger"><div class="report-kpi-icon red"><svg class="ui-icon"><use href="/static/icons.svg#warning"></use></svg></div><div><span>Просрочено</span><strong>{{report.summary.overdue}}</strong><small>активных SLA-просрочек</small></div></article>
+  <article class="report-kpi-card"><div class="report-kpi-ring" style="--pct:{{report.summary.sla_pct}}"><b>{{report.summary.sla_pct}}%</b></div><div><span>SLA вовремя</span><strong>{{report.summary.sla_pct}}%</strong><small>по заявкам с установленным SLA</small></div></article>
+  <article class="report-kpi-card"><div class="report-kpi-icon violet"><svg class="ui-icon"><use href="/static/icons.svg#clock"></use></svg></div><div><span>Трудозатраты</span><strong>{{'%.1f'|format(report.summary.hours)}} ч</strong><small>фактически зафиксировано</small></div></article>
+  <article class="report-kpi-card"><div class="report-kpi-icon amber"><svg class="ui-icon"><use href="/static/icons.svg#maintenance"></use></svg></div><div><span>Среднее решение</span><strong>{{'%.1f'|format(report.summary.avg_resolution_h)}} ч</strong><small>от создания до выполнения</small></div></article>
+  {% if report.can_cost %}<article class="report-kpi-card"><div class="report-kpi-icon indigo"><svg class="ui-icon"><use href="/static/icons.svg#report"></use></svg></div><div><span>Общие затраты</span><strong>{{'{:,.0f}'.format(report.summary.total_cost).replace(',', ' ')}} ₸</strong><small>работы + материалы</small></div></article>{% else %}<article class="report-kpi-card"><div class="report-kpi-icon indigo"><svg class="ui-icon"><use href="/static/icons.svg#building"></use></svg></div><div><span>Лидер по объёму</span><strong class="report-kpi-text">{{report.summary.top_group}}</strong><small>по числу заявок</small></div></article>{% endif %}
+</section>
+
+<div class="report-analytics-grid">
+  <section class="panel report-chart-card report-chart-wide">
+    <div class="panelhead report-chart-head"><div><span class="analytics-badge">Динамика</span><h2>Поток заявок</h2><p class="muted">Созданные и выполненные обращения по времени.</p></div><div class="chart-live-dot"><i></i> Интерактивно</div></div>
+    <div class="report-chart-shell report-chart-line"><canvas id="reportTrendChart"></canvas></div>
+  </section>
+
+  <section class="panel report-chart-card">
+    <div class="panelhead report-chart-head"><div><span class="analytics-badge">Структура</span><h2>Статусы заявок</h2><p class="muted">Текущий состав выборки по статусам.</p></div></div>
+    <div class="report-donut-layout"><div class="report-chart-shell report-chart-donut"><canvas id="reportStatusChart"></canvas></div><div id="reportStatusLegend" class="report-chart-legend"></div></div>
+  </section>
+
+  <section class="panel report-chart-card report-chart-wide">
+    <div class="panelhead report-chart-head"><div><span class="analytics-badge">Сравнение</span><h2>{{report.group_label}}</h2><p class="muted">Объём, выполнение и текущая просрочка по группам.</p></div></div>
+    <div class="report-chart-shell report-chart-bars"><canvas id="reportGroupChart"></canvas></div>
+  </section>
+
+  <section class="panel report-chart-card">
+    <div class="panelhead report-chart-head"><div><span class="analytics-badge">{% if report.can_cost %}Финансы{% else %}Нагрузка{% endif %}</span><h2>{% if report.can_cost %}Структура затрат{% else %}Трудозатраты{% endif %}</h2><p class="muted">{% if report.can_cost %}Работы и материалы за выбранный период.{% else %}Фактическое время по ведущим группам.{% endif %}</p></div></div>
+    <div class="report-chart-shell report-chart-donut"><canvas id="reportCostChart"></canvas></div>
+    <div class="report-chart-center-note">{% if report.can_cost %}<span>Всего</span><b>{{'{:,.0f}'.format(report.summary.total_cost).replace(',', ' ')}} ₸</b>{% else %}<span>Всего</span><b>{{'%.1f'|format(report.summary.hours)}} ч</b>{% endif %}</div>
+  </section>
+</div>
+
+<section class="panel report-table-panel">
+  <div class="panelhead"><div><h2>Детализация {{report.group_label|lower}}</h2><p class="muted">Широкий срез с эффективностью, SLA, временем и затратами.</p></div><span class="report-row-count">{{rows|length}} групп</span></div>
+  <div class="table-scroll report-table-scroll"><table class="responsive-table report-detail-table"><thead><tr><th>Группа</th><th>Заявок</th><th>Открыто</th><th>Выполнено</th><th>Выполнение</th><th>Просрочено</th><th>SLA</th><th>Сред. решение</th><th>Трудозатраты</th>{% if report.can_cost %}<th>Работы</th><th>Материалы</th><th>Итого</th>{% endif %}</tr></thead><tbody>{% for r in rows %}<tr><td data-label="Группа"><b>{{r.name}}</b></td><td data-label="Заявок">{{r.count}}</td><td data-label="Открыто">{{r.open}}</td><td data-label="Выполнено">{{r.closed}}</td><td data-label="Выполнение"><div class="report-progress-cell"><span><i style="width:{{r.completion_pct}}%"></i></span><b>{{r.completion_pct}}%</b></div></td><td data-label="Просрочено"><span class="report-overdue-value {% if r.overdue %}has-overdue{% endif %}">{{r.overdue}}</span></td><td data-label="SLA"><b>{{r.sla_pct}}%</b></td><td data-label="Сред. решение">{{'%.1f'|format(r.avg_resolution_h)}} ч</td><td data-label="Трудозатраты">{{'%.1f'|format(r.hours)}} ч</td>{% if report.can_cost %}<td data-label="Работы">{{'{:,.0f}'.format(r.labor).replace(',', ' ')}} ₸</td><td data-label="Материалы">{{'{:,.0f}'.format(r.parts).replace(',', ' ')}} ₸</td><td data-label="Итого"><b>{{'{:,.0f}'.format(r.total_cost).replace(',', ' ')}} ₸</b></td>{% endif %}</tr>{% else %}<tr><td colspan="12" class="empty-row">За выбранный период данных нет.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+
+<section class="panel report-subscription-panel" id="report-subscriptions">
+  <div class="report-subscription-copy"><span class="analytics-badge">Автоматизация</span><h2>Подписка на отчёт</h2><p>FMTS может присылать этот срез на e-mail автоматически. В подписке сохраняются текущая группировка и период отчёта.</p><div class="report-subscription-current"><svg class="ui-icon"><use href="/static/icons.svg#report"></use></svg><div><span>Текущий срез</span><b>{{report.group_label}} · {{days}} дн.</b></div></div></div>
+  <div class="report-subscription-formbox"><form class="report-subscription-form" method="post" action="/reports/subscriptions/new"><input type="hidden" name="group_by" value="{{group_by}}"><input type="hidden" name="days" value="{{days}}"><label>Название подписки<input name="name" required placeholder="Например: Еженедельный отчёт по объектам"></label><label>Как часто<select name="periodicity"><option value="daily">Ежедневно</option><option value="weekly" selected>Еженедельно</option><option value="monthly">Ежемесячно</option></select></label><button class="btn primary" type="submit"><svg class="ui-icon icon-inline"><use href="/static/icons.svg#mail"></use></svg> Создать подписку</button></form><small>Рассылка работает при настроенном SMTP и e-mail в профиле.</small></div>
+</section>
+
+{% if subscriptions %}<section class="report-subscription-list"><h3>Мои подписки</h3><div class="report-subscription-chips">{% for sub in subscriptions %}<span><svg class="ui-icon"><use href="/static/icons.svg#mail"></use></svg><b>{{sub.name}}</b><small>{{ {'daily':'ежедневно','weekly':'еженедельно','monthly':'ежемесячно'}.get(sub.periodicity,sub.periodicity) }}</small></span>{% endfor %}</div></section>{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+window.addEventListener('load',()=>{
+  if(!window.Chart) return;
+  Chart.defaults.font.family='Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  Chart.defaults.color='#64748b';
+  const trend={{ report.trend|tojson }};
+  const statuses={{ report.status_chart|tojson }};
+  const groups={{ report.top_groups|tojson }};
+  const canCost={{ 'true' if report.can_cost else 'false' }};
+  const money=n=>new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(n||0))+' ₸';
+  const baseAnim={duration:850,easing:'easeOutQuart'};
+  const grid='rgba(148,163,184,.16)';
+  const tooltip={backgroundColor:'#0f172a',titleColor:'#fff',bodyColor:'#e2e8f0',padding:12,cornerRadius:12,displayColors:true};
+
+  const trendCanvas=document.getElementById('reportTrendChart');
+  if(trendCanvas){
+    const c=trendCanvas.getContext('2d');
+    const grad=c.createLinearGradient(0,0,0,300);grad.addColorStop(0,'rgba(37,99,235,.28)');grad.addColorStop(1,'rgba(37,99,235,0)');
+    new Chart(trendCanvas,{type:'line',data:{labels:trend.map(x=>x.label),datasets:[{label:'Создано',data:trend.map(x=>x.created),borderColor:'#2563eb',backgroundColor:grad,fill:true,borderWidth:3,tension:.38,pointRadius:3,pointHoverRadius:7,pointBackgroundColor:'#fff',pointBorderColor:'#2563eb',pointBorderWidth:2},{label:'Выполнено',data:trend.map(x=>x.closed),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.08)',borderWidth:2,tension:.38,pointRadius:2,pointHoverRadius:6}]},options:{responsive:true,maintainAspectRatio:false,animation:baseAnim,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:8,padding:18}},tooltip},scales:{x:{grid:{display:false},border:{display:false}},y:{beginAtZero:true,ticks:{precision:0},grid:{color:grid},border:{display:false}}}}});
+  }
+
+  const statusCanvas=document.getElementById('reportStatusChart');
+  const statusPalette=['#2563eb','#8b5cf6','#f59e0b','#10b981','#0ea5e9','#64748b','#ef4444'];
+  if(statusCanvas){
+    new Chart(statusCanvas,{type:'doughnut',data:{labels:statuses.map(x=>x.name),datasets:[{data:statuses.map(x=>x.value),backgroundColor:statusPalette,borderWidth:0,hoverOffset:10,spacing:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'69%',animation:baseAnim,plugins:{legend:{display:false},tooltip:{...tooltip,callbacks:{label:c=>` ${c.label}: ${c.raw}`}}}}});
+    const legend=document.getElementById('reportStatusLegend');
+    if(legend) legend.innerHTML=statuses.map((x,i)=>`<div><i style="background:${statusPalette[i%statusPalette.length]}"></i><span>${x.name}</span><b>${x.value}</b></div>`).join('');
+  }
+
+  const groupCanvas=document.getElementById('reportGroupChart');
+  if(groupCanvas){
+    new Chart(groupCanvas,{type:'bar',data:{labels:groups.map(x=>x.name),datasets:[{label:'Всего',data:groups.map(x=>x.count),backgroundColor:'rgba(37,99,235,.82)',borderRadius:7,borderSkipped:false},{label:'Выполнено',data:groups.map(x=>x.closed),backgroundColor:'rgba(16,185,129,.82)',borderRadius:7,borderSkipped:false},{label:'Просрочено',data:groups.map(x=>x.overdue),backgroundColor:'rgba(239,68,68,.78)',borderRadius:7,borderSkipped:false}]},options:{indexAxis:groups.length>5?'y':'x',responsive:true,maintainAspectRatio:false,animation:baseAnim,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:8,padding:16}},tooltip},scales:{x:{beginAtZero:true,grid:{color:grid},border:{display:false},ticks:{precision:0}},y:{beginAtZero:true,grid:{display:false},border:{display:false},ticks:{precision:0}}}}});
+  }
+
+  const costCanvas=document.getElementById('reportCostChart');
+  if(costCanvas){
+    if(canCost){
+      new Chart(costCanvas,{type:'doughnut',data:{labels:['Работы','Материалы'],datasets:[{data:[{{report.summary.labor}},{{report.summary.parts}}],backgroundColor:['#2563eb','#8b5cf6'],borderWidth:0,hoverOffset:10,spacing:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',animation:baseAnim,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:8,padding:18}},tooltip:{...tooltip,callbacks:{label:c=>` ${c.label}: ${money(c.raw)}`}}}}});
+    }else{
+      new Chart(costCanvas,{type:'bar',data:{labels:groups.slice(0,6).map(x=>x.name),datasets:[{label:'Часы',data:groups.slice(0,6).map(x=>Number(x.hours||0).toFixed(1)),backgroundColor:'rgba(37,99,235,.8)',borderRadius:8,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:baseAnim,plugins:{legend:{display:false},tooltip},scales:{x:{beginAtZero:true,grid:{color:grid},border:{display:false}},y:{grid:{display:false},border:{display:false}}}}});
+    }
+  }
+});
+</script>
+{% endblock %}
