@@ -17,7 +17,7 @@ from app.security import current_user, generate_totp_secret, verify_totp, totp_u
 from app.access import has_permission, can_view_ticket, scope_ticket_query
 from app.routes.web import ctx, templates, forbidden
 from app.services.audit import audit
-from app.services.notifications import notify_user
+from app.services.notifications import notify_user, send_webpush
 from app.services.smart_search import rank_search
 from app.services.categories import category_options
 
@@ -43,7 +43,7 @@ def notifications_page(request:Request,db:Session=Depends(get_db)):
     denied=_require(request,db,u,'notifications.view')
     if denied:return denied
     rows=db.query(Notification).filter(Notification.user_id==u.id).order_by(Notification.id.desc()).limit(200).all()
-    return templates.TemplateResponse('notifications.html',ctx(request,db,rows=rows,push_enabled=bool(settings.push_vapid_public_key)))
+    return templates.TemplateResponse('notifications.html',ctx(request,db,rows=rows,push_enabled=bool(settings.push_vapid_public_key and settings.push_vapid_private_key)))
 
 @router.post('/notifications/{row_id}/read')
 def notification_read(row_id:int,request:Request,db:Session=Depends(get_db)):
@@ -61,19 +61,94 @@ def notification_read_all(request:Request,db:Session=Depends(get_db)):
     return RedirectResponse('/notifications',303)
 
 @router.get('/api/push/public-key')
-def push_public_key(): return {'public_key':settings.push_vapid_public_key}
+def push_public_key():
+    return {'public_key':settings.push_vapid_public_key if settings.push_vapid_private_key else ''}
+
+@router.get('/api/push/status')
+def push_status(request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: raise HTTPException(401,'Требуется авторизация')
+    rows=db.query(PushSubscription).filter(PushSubscription.user_id==u.id,PushSubscription.active==True).all()
+    return {
+        'configured':bool(settings.push_vapid_public_key and settings.push_vapid_private_key),
+        'enabled':bool(u.push_enabled),
+        'devices':len(rows),
+        'subscriptions':[{'id':x.id,'device_name':x.device_name or 'Устройство','updated_at':x.updated_at.isoformat() if x.updated_at else None} for x in rows],
+    }
 
 @router.post('/api/push/subscribe')
 async def push_subscribe(request:Request,db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u: raise HTTPException(401,'Требуется авторизация')
-    payload=await request.json(); endpoint=str(payload.get('endpoint') or '')
+    if not (settings.push_vapid_public_key and settings.push_vapid_private_key):
+        raise HTTPException(503,'Web Push не настроен администратором')
+    payload=await request.json(); endpoint=str(payload.get('endpoint') or '').strip()
     keys=payload.get('keys') or {}
     if not endpoint: raise HTTPException(400,'Нет endpoint')
+    p256dh=str(keys.get('p256dh') or '').strip(); auth=str(keys.get('auth') or '').strip()
+    if not (p256dh and auth): raise HTTPException(400,'Нет ключей push-подписки')
     row=db.query(PushSubscription).filter(PushSubscription.user_id==u.id,PushSubscription.endpoint==endpoint).first()
     if not row: row=PushSubscription(user_id=u.id,endpoint=endpoint); db.add(row)
-    row.p256dh=str(keys.get('p256dh') or ''); row.auth=str(keys.get('auth') or ''); db.commit()
+    row.p256dh=p256dh; row.auth=auth
+    row.device_name=str(payload.get('device_name') or 'Телефон / браузер')[:160]
+    row.user_agent=str(request.headers.get('user-agent') or '')[:1000]
+    row.active=True; row.updated_at=datetime.utcnow(); u.push_enabled=True
+    db.commit(); db.refresh(row)
+    audit(db,request,u,'push.subscribe',entity_type='push_subscription',entity_id=row.id,details=row.device_name)
+    return {'ok':True,'id':row.id,'device_name':row.device_name}
+
+@router.post('/api/push/unsubscribe')
+async def push_unsubscribe(request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: raise HTTPException(401,'Требуется авторизация')
+    payload=await request.json(); endpoint=str(payload.get('endpoint') or '').strip()
+    if endpoint:
+        rows=db.query(PushSubscription).filter(PushSubscription.user_id==u.id,PushSubscription.endpoint==endpoint).all()
+        for row in rows: db.delete(row)
+        db.commit()
     return {'ok':True}
+
+@router.post('/api/push/subscriptions/{subscription_id}/delete')
+def push_subscription_delete(subscription_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: raise HTTPException(401,'Требуется авторизация')
+    row=db.get(PushSubscription,subscription_id)
+    if row and row.user_id==u.id:
+        db.delete(row); db.commit(); audit(db,request,u,'push.unsubscribe',entity_type='push_subscription',entity_id=subscription_id)
+    return RedirectResponse('/profile#push-settings',303)
+
+@router.post('/api/push/test')
+def push_test(request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u: raise HTTPException(401,'Требуется авторизация')
+    rows=db.query(PushSubscription).filter(PushSubscription.user_id==u.id,PushSubscription.active==True).all()
+    if not rows: raise HTTPException(400,'Сначала включите push на этом устройстве')
+    sent=0
+    for row in rows:
+        if send_webpush(row,'FMTS · тест push','Уведомления на телефон работают.','/notifications','info'): sent+=1
+    db.commit()
+    if not sent: raise HTTPException(502,'Не удалось доставить тестовый push. Проверьте VAPID и разрешение браузера.')
+    return {'ok':True,'sent':sent}
+
+@router.post('/profile/push-preferences')
+def profile_push_preferences(
+    request:Request,
+    push_enabled:str=Form(''),push_assignments:str=Form(''),push_comments:str=Form(''),push_status:str=Form(''),
+    push_sla:str=Form(''),push_maintenance:str=Form(''),push_reminders:str=Form(''),push_inventory:str=Form(''),
+    push_general:str=Form(''),push_quiet_start:str=Form(''),push_quiet_end:str=Form(''),db:Session=Depends(get_db)
+):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    u.push_enabled=push_enabled=='1'; u.push_assignments=push_assignments=='1'; u.push_comments=push_comments=='1'; u.push_status=push_status=='1'
+    u.push_sla=push_sla=='1'; u.push_maintenance=push_maintenance=='1'; u.push_reminders=push_reminders=='1'; u.push_inventory=push_inventory=='1'; u.push_general=push_general=='1'
+    def clean_time(value:str)->str:
+        value=(value or '').strip();
+        if not value:return ''
+        try: datetime.strptime(value,'%H:%M'); return value
+        except Exception:return ''
+    u.push_quiet_start=clean_time(push_quiet_start); u.push_quiet_end=clean_time(push_quiet_end)
+    db.commit(); audit(db,request,u,'push.preferences',entity_type='user',entity_id=u.id)
+    return RedirectResponse('/profile#push-settings',303)
 
 # ---------- Knowledge base ----------
 KNOWLEDGE_EXTENSIONS={'.docx','.pdf','.png','.jpg','.jpeg','.webp','.gif'}

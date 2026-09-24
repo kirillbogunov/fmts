@@ -32,6 +32,7 @@ def process_ticket_reminders(db: Session, now: datetime | None = None) -> int:
             f"/tickets/{ticket.id}#ticket-reminders",
             level="info",
             dedup_key=f"ticket-reminder:{row.id}",
+            event_type="reminder",
         )
         row.sent_at = now
         sent += 1

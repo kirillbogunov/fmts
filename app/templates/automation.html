@@ -7,7 +7,7 @@
     <h1>Автоматизация</h1>
     <p>FMTS сам разбирает новую заявку и выполняет нужные действия. Настройка строится по простой логике <b>«ЕСЛИ → ТО»</b>.</p>
   </div>
-  <div class="pagehead-actions"><a class="btn" href="/services">Каталог сервисов / SLA</a><a class="btn primary" href="#automation-builder">＋ Новое правило</a></div>
+  <div class="pagehead-actions"><a class="btn" href="/services">Каталог сервисов / SLA</a><a class="btn primary" href="#automation-builder"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Новое правило</a></div>
 </div>
 
 {% if request.query_params.get('error') %}<div class="alert danger">{{ request.query_params.get('error') }}</div>{% endif %}
@@ -33,12 +33,12 @@
 <section class="panel automation-presets-panel">
   <div class="panelhead"><div><h2>Готовые сценарии</h2><p class="muted">Нажмите на подходящий вариант — FMTS заполнит основу правила, останется только проверить поля.</p></div></div>
   <div class="automation-presets">
-    <button type="button" class="automation-preset" data-preset="cold"><span class="preset-icon">❄</span><b>Холодильное оборудование</b><small>Высокий приоритет и свободный техник</small></button>
-    <button type="button" class="automation-preset" data-preset="electric"><span class="preset-icon">⚡</span><b>Электрика</b><small>Категория → автоматическое назначение</small></button>
-    <button type="button" class="automation-preset" data-preset="critical"><span class="preset-icon">!</span><b>Критическое оборудование</b><small>Срочно + руководителю</small></button>
-    <button type="button" class="automation-preset" data-preset="leak"><span class="preset-icon">◉</span><b>Протечка / авария</b><small>Срочно + свободный техник</small></button>
-    <button type="button" class="automation-preset" data-preset="site"><span class="preset-icon">⌂</span><b>Распределение по объекту</b><small>Выберите магазин и исполнителя</small></button>
-    <button type="button" class="automation-preset" data-preset="urgent"><span class="preset-icon">↗</span><b>Срочные → руководителю</b><small>Эскалация всех срочных заявок</small></button>
+    <button type="button" class="automation-preset" data-preset="cold"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#snowflake"></use></svg></span><b>Холодильное оборудование</b><small>Высокий приоритет и свободный техник</small></button>
+    <button type="button" class="automation-preset" data-preset="electric"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#bolt"></use></svg></span><b>Электрика</b><small>Категория → автоматическое назначение</small></button>
+    <button type="button" class="automation-preset" data-preset="critical"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#warning"></use></svg></span><b>Критическое оборудование</b><small>Срочно + руководителю</small></button>
+    <button type="button" class="automation-preset" data-preset="leak"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#droplet"></use></svg></span><b>Протечка / авария</b><small>Срочно + свободный техник</small></button>
+    <button type="button" class="automation-preset" data-preset="site"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#building"></use></svg></span><b>Распределение по объекту</b><small>Выберите магазин и исполнителя</small></button>
+    <button type="button" class="automation-preset" data-preset="urgent"><span class="preset-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#arrow-up"></use></svg></span><b>Срочные → руководителю</b><small>Эскалация всех срочных заявок</small></button>
   </div>
 </section>
 
@@ -82,7 +82,7 @@
       <div class="automation-rule-footer"><small>Создано {{fmt_dt(r.created_at,'%d.%m.%Y %H:%M')}}</small><form method="post" action="/automation/{{r.id}}/delete" onsubmit="return confirm('Удалить правило «{{r.name}}»?')"><button type="submit" class="btn danger-soft compact">Удалить</button></form></div>
     </article>
     {% else %}
-    <div class="empty-automation-state"><div>⚡</div><h3>Автоматизаций пока нет</h3><p>Выберите готовый сценарий выше или создайте первое правило вручную.</p><a class="btn primary" href="#automation-builder">Создать первое правило</a></div>
+    <div class="empty-automation-state"><div class="empty-state-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#bolt"></use></svg></div><h3>Автоматизаций пока нет</h3><p>Выберите готовый сценарий выше или создайте первое правило вручную.</p><a class="btn primary" href="#automation-builder">Создать первое правило</a></div>
     {% endfor %}
   </div>
 </section>

@@ -53,7 +53,7 @@
         <div class="survey-step-body">
           <div class="survey-step-title-row">
             <div><div class="survey-step-title">Вопросы</div><p class="muted">Добавляйте, меняйте местами и удаляйте вопросы обычными кнопками.</p></div>
-            <button class="btn" type="button" id="survey-add-question">＋ Добавить вопрос</button>
+            <button class="btn" type="button" id="survey-add-question"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Добавить вопрос</button>
           </div>
           <div class="survey-presets">
             <span>Быстрый шаблон:</span>
@@ -75,7 +75,7 @@
   <aside class="panel survey-preview-card">
     <div class="panelhead"><div><div class="builder-kicker">Предпросмотр</div><h2>Как это увидит заявитель</h2></div></div>
     <div class="survey-preview-shell">
-      <div class="survey-preview-ticket"><span>✓ Заявка выполнена</span><b id="survey-preview-name">Качество обслуживания</b></div>
+      <div class="survey-preview-ticket"><span>Заявка выполнена</span><b id="survey-preview-name">Качество обслуживания</b></div>
       <div id="survey-preview-list" class="survey-preview-list"></div>
       <button class="btn primary survey-preview-submit" type="button" disabled>Отправить оценку</button>
     </div>
@@ -92,7 +92,7 @@
     <article class="survey-template-card {% if not x.active %}inactive{% endif %}">
       <div class="survey-template-top">
         <div>
-          <div class="survey-template-status {% if x.active %}active{% else %}off{% endif %}">{% if x.active %}● Активна{% else %}● Отключена{% endif %}</div>
+          <div class="survey-template-status {% if x.active %}active{% else %}off{% endif %}">{% if x.active %}<span class="status-dot live"></span> Активна{% else %}<span class="status-dot"></span> Отключена{% endif %}</div>
           <h3>{{x.name}}</h3>
           <p>{{x.service.name if x.service else 'Для всех сервисов'}}</p>
         </div>
@@ -100,17 +100,17 @@
       </div>
       <div class="survey-template-questions">
         {% for q in item.questions[:4] %}
-        <div><span class="survey-type-icon {{q.type}}">{% if q.type=='rating' %}★{% elif q.type=='yesno' %}✓{% else %}≡{% endif %}</span><b>{{q.label}}</b>{% if q.required %}<small>обязательный</small>{% endif %}</div>
+        <div><span class="survey-type-icon {{q.type}}">{% if q.type=='rating' %}<svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg>{% elif q.type=='yesno' %}<svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg>{% else %}<svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#template"></use></svg>{% endif %}</span><b>{{q.label}}</b>{% if q.required %}<small>обязательный</small>{% endif %}</div>
         {% endfor %}
-        {% if item.questions|length > 4 %}<div class="survey-more-questions">＋ ещё {{item.questions|length - 4}}</div>{% endif %}
+        {% if item.questions|length > 4 %}<div class="survey-more-questions">ещё {{item.questions|length - 4}}</div>{% endif %}
       </div>
       <div class="survey-template-actions">
-        <button type="button" class="btn survey-edit-button" data-survey='{{ {"id":x.id,"name":x.name,"service_id":x.service_id or "","questions":item.questions}|tojson|forceescape }}'>✎ Редактировать</button>
+        <button type="button" class="btn survey-edit-button" data-survey='{{ {"id":x.id,"name":x.name,"service_id":x.service_id or "","questions":item.questions}|tojson|forceescape }}'><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg> Редактировать</button>
         <form method="post" action="/surveys/{{x.id}}/toggle"><button class="btn {% if x.active %}danger-soft{% else %}success-soft{% endif %}" type="submit">{% if x.active %}Отключить{% else %}Включить{% endif %}</button></form>
       </div>
     </article>
     {% else %}
-    <div class="survey-empty-state"><div>☆</div><h3>Анкет пока нет</h3><p>Создайте первую короткую анкету. Для начала достаточно 2–3 вопросов.</p></div>
+    <div class="survey-empty-state"><div><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#survey"></use></svg></div><h3>Анкет пока нет</h3><p>Создайте первую короткую анкету. Для начала достаточно 2–3 вопросов.</p></div>
     {% endfor %}
   </div>
 </section>
@@ -119,7 +119,7 @@
   <div class="panelhead"><div><h2>Последние ответы</h2><p class="muted">До 200 последних оценок качества</p></div></div>
   <table class="responsive-table survey-response-table">
     <thead><tr><th>Дата</th><th>Анкета</th><th>Заявка</th><th>Пользователь</th><th>Оценка</th></tr></thead>
-    <tbody>{% for r in responses %}<tr><td>{{fmt_dt(r.created_at)}}</td><td><b>{{r.survey.name}}</b></td><td><a href="/tickets/{{r.ticket_id}}">{{r.ticket.number}}</a></td><td>{{r.user.full_name if r.user else '—'}}</td><td><span class="survey-score-badge">★ {{r.score}} / 5</span></td></tr>{% else %}<tr><td colspan="5" class="empty-row">Ответов пока нет. Они появятся после закрытия заявок и заполнения анкеты.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for r in responses %}<tr><td>{{fmt_dt(r.created_at)}}</td><td><b>{{r.survey.name}}</b></td><td><a href="/tickets/{{r.ticket_id}}">{{r.ticket.number}}</a></td><td>{{r.user.full_name if r.user else '—'}}</td><td><span class="survey-score-badge">{{r.score}} / 5</span></td></tr>{% else %}<tr><td colspan="5" class="empty-row">Ответов пока нет. Они появятся после закрытия заявок и заполнения анкеты.</td></tr>{% endfor %}</tbody>
   </table>
 </section>
 
@@ -170,7 +170,7 @@
     list.innerHTML=''; preview.innerHTML='';
     questions.forEach((q,i)=>{
       const row=document.createElement('div'); row.className='survey-builder-question';
-      row.innerHTML=`<div class="survey-question-order">${i+1}</div><div class="survey-question-main"><div class="survey-question-row"><select class="survey-q-type" aria-label="Тип вопроса"><option value="rating" ${q.type==='rating'?'selected':''}>★ Оценка 1–5</option><option value="yesno" ${q.type==='yesno'?'selected':''}>✓ Да / Нет</option><option value="text" ${q.type==='text'?'selected':''}>≡ Текстовый ответ</option></select><input class="survey-q-label" maxlength="500" value="${escapeHtml(q.label)}" placeholder="Введите вопрос"><label class="survey-required-toggle"><input type="checkbox" class="survey-q-required" ${q.required?'checked':''}><span>Обязательный</span></label></div><div class="survey-question-actions"><button type="button" class="icon-btn survey-up" title="Выше">↑</button><button type="button" class="icon-btn survey-down" title="Ниже">↓</button><button type="button" class="icon-btn survey-duplicate" title="Дублировать">⧉</button><button type="button" class="icon-btn danger survey-delete" title="Удалить">×</button></div></div>`;
+      row.innerHTML=`<div class="survey-question-order">${i+1}</div><div class="survey-question-main"><div class="survey-question-row"><select class="survey-q-type" aria-label="Тип вопроса"><option value="rating" ${q.type==='rating'?'selected':''}>Оценка 1–5</option><option value="yesno" ${q.type==='yesno'?'selected':''}>Да / Нет</option><option value="text" ${q.type==='text'?'selected':''}>Текстовый ответ</option></select><input class="survey-q-label" maxlength="500" value="${escapeHtml(q.label)}" placeholder="Введите вопрос"><label class="survey-required-toggle"><input type="checkbox" class="survey-q-required" ${q.required?'checked':''}><span>Обязательный</span></label></div><div class="survey-question-actions"><button type="button" class="icon-btn survey-up" title="Выше"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#arrow-up"></use></svg></button><button type="button" class="icon-btn survey-down" title="Ниже"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#arrow-down"></use></svg></button><button type="button" class="icon-btn survey-duplicate" title="Дублировать"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#duplicate"></use></svg></button><button type="button" class="icon-btn danger survey-delete" title="Удалить"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#trash"></use></svg></button></div></div>`;
       row.querySelector('.survey-q-type').addEventListener('change',e=>{q.type=e.target.value; render();});
       row.querySelector('.survey-q-label').addEventListener('input',e=>{q.label=e.target.value; serialize(); renderPreview();});
       row.querySelector('.survey-q-required').addEventListener('change',e=>{q.required=e.target.checked; serialize(); renderPreview();});
@@ -191,7 +191,7 @@
       const card=document.createElement('div'); card.className='survey-preview-question';
       const req=q.required?'<em>обязательно</em>':'';
       let control='';
-      if(q.type==='rating') control='<div class="survey-preview-stars">☆ ☆ ☆ ☆ ☆</div>';
+      if(q.type==='rating') control='<div class="survey-preview-stars"><svg class="ui-icon survey-preview-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg><svg class="ui-icon survey-preview-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg><svg class="ui-icon survey-preview-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg><svg class="ui-icon survey-preview-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg><svg class="ui-icon survey-preview-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg></div>';
       else if(q.type==='yesno') control='<div class="survey-preview-yesno"><span>Да</span><span>Нет</span></div>';
       else control='<div class="survey-preview-text">Ваш ответ…</div>';
       card.innerHTML=`<div><b>${i+1}. ${escapeHtml(q.label||'Новый вопрос')}</b>${req}</div>${control}`;
@@ -218,6 +218,6 @@
 })();
 </script>
 {% else %}
-<section class="panel"><div class="survey-empty-state"><div>☆</div><h2>Анкета качества</h2><p>После выполнения вашей заявки FMTS предложит коротко оценить результат работы. Отдельно настраивать ничего не нужно.</p></div></section>
+<section class="panel"><div class="survey-empty-state"><div><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#survey"></use></svg></div><h2>Анкета качества</h2><p>После выполнения вашей заявки FMTS предложит коротко оценить результат работы. Отдельно настраивать ничего не нужно.</p></div></section>
 {% endif %}
 {% endblock %}

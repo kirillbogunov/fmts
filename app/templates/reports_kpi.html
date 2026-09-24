@@ -5,7 +5,7 @@
 <div class="pagehead kpi-pagehead">
   <div><div class="eyebrow">ОТЧЁТ ЗА МЕСЯЦ</div><h1>Рейтинг ремонтников / KPI</h1><p>Период: <b>{{ period.label }}</b>. Показатели считаются по заявкам, закреплённым за исполнителем.</p></div>
   <div class="kpi-head-actions">
-    <a class="btn" href="/reports/kpi.csv?month={{period.value}}">⇩ CSV для Excel</a>
+    <a class="btn" href="/reports/kpi.csv?month={{period.value}}"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#download"></use></svg> CSV для Excel</a>
     <button class="btn" type="button" onclick="window.print()">⎙ Печать / PDF</button>
   </div>
 </div>
@@ -79,15 +79,15 @@
     <tbody>
     {% for x in report.rows %}
       <tr class="{% if x.rank == 1 %}kpi-first{% elif not x.has_activity %}kpi-no-activity{% endif %}">
-        <td data-label="Место"><span class="rank-badge {% if x.rank and x.rank <= 3 %}top-{{x.rank}}{% endif %}">{% if x.rank == 1 %}🥇{% elif x.rank == 2 %}🥈{% elif x.rank == 3 %}🥉{% else %}{{x.rank or '—'}}{% endif %}</span></td>
+        <td data-label="Место"><span class="rank-badge {% if x.rank and x.rank <= 3 %}top-{{x.rank}}{% endif %}">{{x.rank or '—'}}</span></td>
         <td data-label="Ремонтник"><b>{{x.name}}</b><small class="kpi-sub">@{{x.username}}</small></td>
         <td data-label="KPI"><div class="kpi-score"><b>{{x.score}}%</b><div class="kpi-bar"><i style="width:{{x.score}}%"></i></div></div></td>
-        <td data-label="Рейтинг"><span class="kpi-rating">★ {{x.rating}}</span><small>/ 5</small></td>
+        <td data-label="Рейтинг"><span class="kpi-rating">{{x.rating}}</span><small>/ 5</small></td>
         <td data-label="Выполнено"><b>{{x.completed}}</b><small> из {{x.handled}} за период</small></td>
         <td data-label="SLA"><span class="{% if x.sla_rate >= 90 %}good-text{% elif x.sla_rate < 70 and x.completed %}bad-text{% endif %}">{{x.sla_rate}}%</span>{% if x.overdue_completed %}<small>{{x.overdue_completed}} проср.</small>{% endif %}</td>
         <td data-label="Закрытие">{{x.closure_rate}}%</td>
         <td data-label="Баллы"><b>{{x.points}}</b><small>{{x.productivity_rate}}% цели</small></td>
-        <td data-label="Документация">{{x.documentation_rate}}%</td><td data-label="Оценка">{% if x.customer_reviews %}<b>★ {{x.customer_rating}}</b><small>{{x.customer_reviews}} отзыв.</small>{% else %}—{% endif %}</td>
+        <td data-label="Документация">{{x.documentation_rate}}%</td><td data-label="Оценка">{% if x.customer_reviews %}<b>{{x.customer_rating}} / 5</b><small>{{x.customer_reviews}} отзыв.</small>{% else %}—{% endif %}</td>
         <td data-label="Факт. время"><b>{{x.tracked_hours}} ч</b><small>{% if x.completed %}{{x.avg_tracked_hours}} ч / заявку{% else %}{{x.work_sessions}} сеанс(а){% endif %}</small></td>
         <td data-label="Ср. цикл">{% if x.completed %}{{x.avg_resolution_hours}} ч{% else %}—{% endif %}<small>от создания до закрытия</small></td>
       </tr>

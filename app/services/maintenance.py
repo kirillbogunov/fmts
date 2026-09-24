@@ -131,6 +131,7 @@ def _notify_occurrence(db: Session, plan: MaintenancePlan, run_date: date, stage
             link,
             level="warning" if stage in {"repeat", "overdue"} else "info",
             dedup_key=f"maintenance:{plan.id}:{run_date.isoformat()}:{stage}:{user.id}",
+            event_type="maintenance",
         )
         if row:
             count += 1

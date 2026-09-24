@@ -18,9 +18,9 @@
 {% if user %}
 {% set path = request.url.path %}
 <div class="mobile-topbar">
-  <button class="mobile-menu-btn" type="button" aria-label="Открыть меню" onclick="setMobileMenu(!document.body.classList.contains('menu-open'))">☰</button>
+  <button class="mobile-menu-btn" type="button" aria-label="Открыть меню" onclick="setMobileMenu(!document.body.classList.contains('menu-open'))"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#menu"></use></svg></button>
   <a class="mobile-brand" href="/"><b>{{ app_name }}</b><small>ТОиР</small></a>
-  <a class="install-mini" href="/search" aria-label="Поиск">⌕</a><button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button>
+  <a class="install-mini" href="/search" aria-label="Поиск"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg></a><button id="installPwaTop" class="install-mini" type="button" hidden>Установить</button>
 </div>
 <div class="layout">
 <aside class="sidebar" id="sidebar" aria-label="Главное меню">
@@ -29,52 +29,52 @@
       <span class="brand-mark">F</span>
       <div class="brand-copy"><b>{{ app_name }}</b><small>Facility Management & Task System</small></div>
     </a>
-    <button class="sidebar-close" type="button" aria-label="Закрыть меню" onclick="setMobileMenu(false)">×</button>
+    <button class="sidebar-close" type="button" aria-label="Закрыть меню" onclick="setMobileMenu(false)"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#close"></use></svg></button>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section"><span>{{tr('work')}}</span></div>
-    <a href="/" class="navitem {% if path == '/' %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">{{tr('dashboard')}}</span></a>
-    <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}"><span class="nav-icon">☑</span><span class="nav-label">{{tr('tickets')}}</span></a>
-    {% if nav.notifications %}<a href="/notifications" class="navitem {% if path.startswith('/notifications') %}active{% endif %}"><span class="nav-icon">◌</span><span class="nav-label">{{tr('notifications')}}{% if unread_notifications %}<b class="nav-count">{{unread_notifications}}</b>{% endif %}</span></a>{% endif %}
-    {% if user.role in ['dispatcher','manager','admin'] %}<a href="/team/schedule" class="navitem {% if path.startswith('/team/schedule') %}active{% endif %}"><span class="nav-icon">◴</span><span class="nav-label">{{tr('team_schedule')}}</span></a>{% endif %}
-    {% if nav.teams %}<a href="/teams" class="navitem {% if path.startswith('/teams') %}active{% endif %}"><span class="nav-icon">◎</span><span class="nav-label">{{tr('teams')}}</span></a>{% endif %}
+    <a href="/" class="navitem {% if path == '/' %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#dashboard"></use></svg></span><span class="nav-label">{{tr('dashboard')}}</span></a>
+    <a href="/tickets" class="navitem {% if path.startswith('/tickets') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#tickets"></use></svg></span><span class="nav-label">{{tr('tickets')}}</span></a>
+    {% if nav.notifications %}<a href="/notifications" class="navitem {% if path.startswith('/notifications') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#bell"></use></svg></span><span class="nav-label">{{tr('notifications')}}{% if unread_notifications %}<b class="nav-count">{{unread_notifications}}</b>{% endif %}</span></a>{% endif %}
+    {% if user.role in ['dispatcher','manager','admin'] %}<a href="/team/schedule" class="navitem {% if path.startswith('/team/schedule') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#calendar-clock"></use></svg></span><span class="nav-label">{{tr('team_schedule')}}</span></a>{% endif %}
+    {% if nav.teams %}<a href="/teams" class="navitem {% if path.startswith('/teams') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#team"></use></svg></span><span class="nav-label">{{tr('teams')}}</span></a>{% endif %}
 
     {% if nav.sites or nav.equipment or nav.maintenance or nav.inventory or nav.contractors or nav.data_import or nav.resources %}<div class="nav-section"><span>{{tr('assets')}}</span></div>{% endif %}
-    {% if nav.sites %}<a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}"><span class="nav-icon">⌂</span><span class="nav-label">{{tr('sites')}}</span></a>{% endif %}
-    {% if nav.equipment %}<a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}"><span class="nav-icon">▣</span><span class="nav-label">{{tr('equipment')}}</span></a>{% endif %}
-    {% if nav.data_import %}<a href="/data-import" class="navitem {% if path.startswith('/data-import') %}active{% endif %}"><span class="nav-icon">⇩</span><span class="nav-label">{{tr('data_import')}}</span></a>{% endif %}
-    {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}"><span class="nav-icon">↻</span><span class="nav-label">{{tr('maintenance')}}</span></a>{% endif %}
-    {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}"><span class="nav-icon">▤</span><span class="nav-label">{{tr('inventory')}}</span></a>{% endif %}
-    {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}"><span class="nav-icon">◉</span><span class="nav-label">{{tr('contractors')}}</span></a>{% endif %}
-    {% if nav.resources %}<a href="/resources" class="navitem {% if path.startswith('/resources') %}active{% endif %}"><span class="nav-icon">▦</span><span class="nav-label">{{tr('resources')}}</span></a>{% endif %}
+    {% if nav.sites %}<a href="/sites" class="navitem {% if path.startswith('/sites') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#building"></use></svg></span><span class="nav-label">{{tr('sites')}}</span></a>{% endif %}
+    {% if nav.equipment %}<a href="/equipment" class="navitem {% if path.startswith('/equipment') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#equipment"></use></svg></span><span class="nav-label">{{tr('equipment')}}</span></a>{% endif %}
+    {% if nav.data_import %}<a href="/data-import" class="navitem {% if path.startswith('/data-import') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#download"></use></svg></span><span class="nav-label">{{tr('data_import')}}</span></a>{% endif %}
+    {% if nav.maintenance %}<a href="/maintenance" class="navitem {% if path.startswith('/maintenance') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#maintenance"></use></svg></span><span class="nav-label">{{tr('maintenance')}}</span></a>{% endif %}
+    {% if nav.inventory %}<a href="/inventory" class="navitem {% if path.startswith('/inventory') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#inventory"></use></svg></span><span class="nav-label">{{tr('inventory')}}</span></a>{% endif %}
+    {% if nav.contractors %}<a href="/contractors" class="navitem {% if path.startswith('/contractors') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#contractor"></use></svg></span><span class="nav-label">{{tr('contractors')}}</span></a>{% endif %}
+    {% if nav.resources %}<a href="/resources" class="navitem {% if path.startswith('/resources') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#resources"></use></svg></span><span class="nav-label">{{tr('resources')}}</span></a>{% endif %}
 
     {% if nav.services or nav.knowledge or nav.templates or nav.automation or nav.categories or nav.surveys or nav.itsm or nav.sla_calendars %}<div class="nav-section"><span>{{tr('service_desk')}}</span></div>{% endif %}
-    {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">{{tr('services')}}</span></a>{% endif %}
-    {% if nav.itsm %}<a href="/itsm" class="navitem {% if path.startswith('/itsm') %}active{% endif %}"><span class="nav-icon">◆</span><span class="nav-label">{{tr('itsm')}}</span></a>{% endif %}
-    {% if nav.sla_calendars %}<a href="/sla-calendars" class="navitem {% if path.startswith('/sla-calendars') %}active{% endif %}"><span class="nav-icon">◴</span><span class="nav-label">{{tr('sla_calendars')}}</span></a>{% endif %}
-    {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}"><span class="nav-icon">▧</span><span class="nav-label">{{tr('knowledge')}}</span></a>{% endif %}
-    {% if nav.templates %}<a href="/ticket-templates" class="navitem {% if path.startswith('/ticket-templates') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">{{tr('templates')}}</span></a>{% endif %}
-    {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}"><span class="nav-icon nav-icon-accent">⚡</span><span class="nav-label">{{tr('automation')}}</span></a>{% endif %}
-    {% if nav.categories %}<a href="/categories" class="navitem {% if path.startswith('/categories') %}active{% endif %}"><span class="nav-icon">⌘</span><span class="nav-label">{{tr('categories')}}</span></a>{% endif %}
-    {% if nav.surveys %}<a href="/surveys" class="navitem {% if path.startswith('/surveys') %}active{% endif %}"><span class="nav-icon">☆</span><span class="nav-label">{{tr('surveys')}}</span></a>{% endif %}
+    {% if nav.services %}<a href="/services" class="navitem {% if path.startswith('/services') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#services"></use></svg></span><span class="nav-label">{{tr('services')}}</span></a>{% endif %}
+    {% if nav.itsm %}<a href="/itsm" class="navitem {% if path.startswith('/itsm') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#diamond"></use></svg></span><span class="nav-label">{{tr('itsm')}}</span></a>{% endif %}
+    {% if nav.sla_calendars %}<a href="/sla-calendars" class="navitem {% if path.startswith('/sla-calendars') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#calendar"></use></svg></span><span class="nav-label">{{tr('sla_calendars')}}</span></a>{% endif %}
+    {% if nav.knowledge %}<a href="/knowledge" class="navitem {% if path.startswith('/knowledge') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#book"></use></svg></span><span class="nav-label">{{tr('knowledge')}}</span></a>{% endif %}
+    {% if nav.templates %}<a href="/ticket-templates" class="navitem {% if path.startswith('/ticket-templates') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#template"></use></svg></span><span class="nav-label">{{tr('templates')}}</span></a>{% endif %}
+    {% if nav.automation %}<a href="/automation" class="navitem {% if path.startswith('/automation') %}active{% endif %}"><span class="nav-icon nav-icon-accent"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#bolt"></use></svg></span><span class="nav-label">{{tr('automation')}}</span></a>{% endif %}
+    {% if nav.categories %}<a href="/categories" class="navitem {% if path.startswith('/categories') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#tree"></use></svg></span><span class="nav-label">{{tr('categories')}}</span></a>{% endif %}
+    {% if nav.surveys %}<a href="/surveys" class="navitem {% if path.startswith('/surveys') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#survey"></use></svg></span><span class="nav-label">{{tr('surveys')}}</span></a>{% endif %}
 
     {% if nav.kpi or nav.reports or nav.audit or nav.labor or nav.subscriptions %}<div class="nav-section"><span>{{tr('analytics')}}</span></div>{% endif %}
-    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}"><span class="nav-icon">★</span><span class="nav-label">{{tr('kpi')}}</span></a>{% endif %}
-    {% if nav.labor %}<a href="/reports/labor" class="navitem {% if path.startswith('/reports/labor') %}active{% endif %}"><span class="nav-icon">◷</span><span class="nav-label">{{tr('labor')}}</span></a>{% endif %}
-    {% if nav.reports %}<a href="/reports/builder" class="navitem {% if path.startswith('/reports/builder') %}active{% endif %}"><span class="nav-icon">▥</span><span class="nav-label">{{tr('reports')}}</span></a>{% endif %}
-    {% if nav.subscriptions %}<a href="/subscriptions" class="navitem {% if path.startswith('/subscriptions') %}active{% endif %}"><span class="nav-icon">✉</span><span class="nav-label">{{tr('subscriptions')}}</span></a>{% endif %}
-    {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}"><span class="nav-icon">☷</span><span class="nav-label">{{tr('audit')}}</span></a>{% endif %}
+    {% if nav.kpi %}<a href="/reports/kpi" class="navitem {% if path.startswith('/reports/kpi') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#chart"></use></svg></span><span class="nav-label">{{tr('kpi')}}</span></a>{% endif %}
+    {% if nav.labor %}<a href="/reports/labor" class="navitem {% if path.startswith('/reports/labor') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#clock"></use></svg></span><span class="nav-label">{{tr('labor')}}</span></a>{% endif %}
+    {% if nav.reports %}<a href="/reports/builder" class="navitem {% if path.startswith('/reports/builder') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#report"></use></svg></span><span class="nav-label">{{tr('reports')}}</span></a>{% endif %}
+    {% if nav.subscriptions %}<a href="/subscriptions" class="navitem {% if path.startswith('/subscriptions') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#mail"></use></svg></span><span class="nav-label">{{tr('subscriptions')}}</span></a>{% endif %}
+    {% if nav.audit %}<a href="/audit" class="navitem {% if path.startswith('/audit') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#audit"></use></svg></span><span class="nav-label">{{tr('audit')}}</span></a>{% endif %}
 
     {% if nav.integration or nav.settings or nav.users or user.role == 'admin' %}<div class="nav-section"><span>{{tr('management')}}</span></div>{% endif %}
-    {% if nav.integration %}<a href="/integration" class="navitem {% if path == '/integration' or path.startswith('/integration/') %}active{% endif %}"><span class="nav-icon">⇄</span><span class="nav-label">{{tr('integrations')}}</span></a>{% endif %}
-    {% if nav.system_services %}<a href="/system-services" class="navitem {% if path.startswith('/system-services') %}active{% endif %}"><span class="nav-icon">◫</span><span class="nav-label">{{tr('system_services')}}</span></a>{% endif %}
-    {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}"><span class="nav-icon">⚙</span><span class="nav-label">{{tr('settings')}}</span></a>{% endif %}
-    {% if nav.users %}<a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}"><span class="nav-icon">♙</span><span class="nav-label">{{tr('users')}}</span></a>{% endif %}
+    {% if nav.integration %}<a href="/integration" class="navitem {% if path == '/integration' or path.startswith('/integration/') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#link"></use></svg></span><span class="nav-label">{{tr('integrations')}}</span></a>{% endif %}
+    {% if nav.system_services %}<a href="/system-services" class="navitem {% if path.startswith('/system-services') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#server"></use></svg></span><span class="nav-label">{{tr('system_services')}}</span></a>{% endif %}
+    {% if nav.settings %}<a href="/settings/reference-data" class="navitem {% if path.startswith('/settings') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg></span><span class="nav-label">{{tr('settings')}}</span></a>{% endif %}
+    {% if nav.users %}<a href="/users" class="navitem {% if path.startswith('/users') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#user"></use></svg></span><span class="nav-label">{{tr('users')}}</span></a>{% endif %}
     {% if user.role == 'admin' %}<a href="/docs" class="navitem"><span class="nav-icon nav-icon-api">API</span><span class="nav-label">REST API</span></a>{% endif %}
-    <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}"><span class="nav-icon">ⓘ</span><span class="nav-label">{{tr('about')}}</span></a>
+    <a href="/about" class="navitem {% if path.startswith('/about') %}active{% endif %}"><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#info"></use></svg></span><span class="nav-label">{{tr('about')}}</span></a>
   </nav>
   <div class="sidebar-bottom">
-    <button id="installPwa" class="navitem install-nav" type="button" hidden><span class="nav-icon">▣</span><span class="nav-label">{{tr('install')}}</span></button>
+    <button id="installPwa" class="navitem install-nav" type="button" hidden><span class="nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#install"></use></svg></span><span class="nav-label">{{tr('install')}}</span></button>
     <div class="userbox">
       <div class="user-avatar">{{ (user.full_name or user.username or 'U')[:1] | upper }}</div>
       <div class="user-meta"><b>{{ user.full_name }}</b><small>{{ role_labels.get(user.role, user.role) }}</small></div>
@@ -92,29 +92,37 @@
 </div>
 <nav class="mobile-bottom-nav" aria-label="Основная навигация">
   <a href="/" class="mobile-nav-item {% if path == '/' %}active{% endif %}" aria-label="Дашборд">
-    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5h-5.8v-6.3H9.3V21H3.5a.5.5 0 0 1-.5-.5z"/></svg></span>
+    <span class="mobile-nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#dashboard"></use></svg></span>
     <small>{{tr('dashboard')}}</small>
   </a>
   <a href="/tickets" class="mobile-nav-item {% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}" aria-label="Заявки">
-    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5h8M9 3h6a1 1 0 0 1 1 1v2H8V4a1 1 0 0 1 1-1Zm-3 3h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm2 5h8M8 15h8"/></svg></span>
+    <span class="mobile-nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#tickets"></use></svg></span>
     <small>{{tr('tickets')}}</small>
   </a>
   {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-nav-item mobile-create {% if path == '/tickets/new' %}active{% endif %}" aria-label="Создать заявку">
-    <span class="mobile-nav-icon mobile-create-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+    <span class="mobile-nav-icon mobile-create-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg></span>
     <small>Создать</small>
   </a>{% endif %}
   {% if nav.maintenance %}<a href="/maintenance" class="mobile-nav-item {% if path.startswith('/maintenance') %}active{% endif %}" aria-label="ТО и ППР">
-    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.2 8.5A7 7 0 0 1 18.8 7L20 9M4 15l1.2 2A7 7 0 0 0 17.8 15.5"/></svg></span>
+    <span class="mobile-nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#maintenance"></use></svg></span>
     <small>ТО / ППР</small>
   </a>{% endif %}
   {% if nav.notifications %}<a href="/notifications" class="mobile-nav-item {% if path.startswith('/notifications') %}active{% endif %}" aria-label="Уведомления">
-    <span class="mobile-nav-icon mobile-bell-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>{% if unread_notifications %}<b class="mobile-nav-badge">{{unread_notifications}}</b>{% endif %}</span>
+    <span class="mobile-nav-icon mobile-bell-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#bell"></use></svg>{% if unread_notifications %}<b class="mobile-nav-badge">{{unread_notifications}}</b>{% endif %}</span>
     <small>{{tr('notifications')}}</small>
   </a>{% else %}<a href="/profile" class="mobile-nav-item {% if path.startswith('/profile') %}active{% endif %}" aria-label="Профиль">
-    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg></span>
+    <span class="mobile-nav-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#user"></use></svg></span>
     <small>{{tr('profile')}}</small>
   </a>{% endif %}
 </nav>
+{% if push_configured %}
+<div id="pushNudge" class="push-nudge" hidden>
+  <div class="push-nudge-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#bell"></use></svg></div>
+  <div class="push-nudge-copy"><b>Не пропускайте новые заявки</b><span>Получайте назначения, SLA и напоминания ТО прямо на телефон.</span></div>
+  <button type="button" class="btn primary push-nudge-action" data-push-enable>Включить</button>
+  <button type="button" class="push-nudge-close" data-push-nudge-dismiss aria-label="Закрыть"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#close"></use></svg></button>
+</div>
+{% endif %}
 {% else %}{% block anonymous %}{% endblock %}
 <footer class="public-footer">Разработчик: <b>{{ developer_name }}</b> © 2026 · Telegram: <a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></footer>{% endif %}
 <script>
@@ -139,7 +147,7 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') setMobileMenu(f
 window.copyText = async function(text, button){
   try {
     await navigator.clipboard.writeText(text);
-    if(button){ const old=button.innerHTML; button.innerHTML='✓ Скопировано'; setTimeout(()=>button.innerHTML=old,1600); }
+    if(button){ const old=button.innerHTML; button.innerHTML='Скопировано'; setTimeout(()=>button.innerHTML=old,1600); }
   } catch(e) {
     const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
   }
@@ -156,5 +164,6 @@ window.openRoutePicker = function(address){
 window.closeRoutePicker = function(){ const modal=document.getElementById('route-picker'); if(modal) modal.classList.remove('open'); document.body.classList.remove('modal-open'); };
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeRoutePicker(); });
 </script>
+{% if user and push_configured %}<script src="/static/push.js?v={{ app_version }}"></script>{% endif %}
 {% block extra_scripts %}{% endblock %}
 </body></html>

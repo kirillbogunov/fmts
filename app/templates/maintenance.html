@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% block content %}
-<div class="pagehead maintenance-head"><div><div class="eyebrow">ТОИР / ПЛАНОВЫЕ РАБОТЫ</div><h1>ТО / ППР</h1><p>{% if user.role=='technician' %}Назначенные регламентные работы и чек-листы{% else %}Планы обслуживания, понятные чек-листы и автоматические заявки{% endif %}</p></div>{% if can('maintenance.manage') %}<form method="post" action="/maintenance/generate"><button class="btn primary">⚡ Создать заявки по сроку</button></form>{% endif %}</div>
+<div class="pagehead maintenance-head"><div><div class="eyebrow">ТОИР / ПЛАНОВЫЕ РАБОТЫ</div><h1>ТО / ППР</h1><p>{% if user.role=='technician' %}Назначенные регламентные работы и чек-листы{% else %}Планы обслуживания, понятные чек-листы и автоматические заявки{% endif %}</p></div>{% if can('maintenance.manage') %}<form method="post" action="/maintenance/generate"><button class="btn primary"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#bolt"></use></svg> Создать заявки по сроку</button></form>{% endif %}</div>
 
 <div class="maintenance-plan-grid">
 {% for p in plans %}
@@ -16,7 +16,7 @@
   </div>
   {% if can('maintenance.manage') %}
   <details class="maintenance-policy-editor">
-    <summary><span>🔔 Сроки, SLA и уведомления</span><b>обязательно</b></summary>
+    <summary><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#bell"></use></svg> Сроки, SLA и уведомления</span><b>обязательно</b></summary>
     <form method="post" action="/maintenance/{{p.id}}/settings" class="form maintenance-policy-form">
       <div class="policy-grid">
         <label>Создать заявку заранее, дней<input type="number" name="create_before_days" min="0" value="{{p.create_before_days}}"><small>Например 7 — заявка появится за неделю до ТО.</small></label>
@@ -33,7 +33,7 @@
   {% endif %}
 
   <details class="plan-checklist-editor" data-plan-id="{{p.id}}">
-    <summary><span>☑ Чек-лист обслуживания</span><b>{{rows|length}} пунктов</b></summary>
+    <summary><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#survey"></use></svg> Чек-лист обслуживания</span><b>{{rows|length}} пунктов</b></summary>
     {% if can('maintenance.manage') %}
     <div class="checklist-builder-help"><div class="builder-step"><span>1</span><div><b>Добавьте пункт</b><small>Например «Визуальный осмотр»</small></div></div><div class="builder-step"><span>2</span><div><b>Нужна вложенность?</b><small>Нажмите «+ подпункт» у нужной строки</small></div></div><div class="builder-step"><span>3</span><div><b>Готово</b><small>Нумерацию FMTS сделает сам</small></div></div></div>
     {% endif %}
@@ -48,10 +48,10 @@
         </div>
         {% if can('maintenance.manage') %}
         <div class="checklist-simple-actions">
-          <button type="button" class="mini-action add-child-btn" data-target="child-form-{{x.id}}" title="Добавить подпункт">＋ подпункт</button>
+          <button type="button" class="mini-action add-child-btn" data-target="child-form-{{x.id}}" title="Добавить подпункт"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> подпункт</button>
           <form method="post" action="/maintenance/{{p.id}}/checklist/{{x.id}}/move"><input type="hidden" name="direction" value="up"><button class="icon-action" type="submit" title="Поднять выше">↑</button></form>
           <form method="post" action="/maintenance/{{p.id}}/checklist/{{x.id}}/move"><input type="hidden" name="direction" value="down"><button class="icon-action" type="submit" title="Опустить ниже">↓</button></form>
-          <button type="button" class="icon-action edit-item-btn" data-target="edit-form-{{x.id}}" title="Редактировать">✎</button>
+          <button type="button" class="icon-action edit-item-btn" data-target="edit-form-{{x.id}}" title="Редактировать"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></button>
           <form method="post" action="/maintenance/{{p.id}}/checklist/{{x.id}}/delete" onsubmit="return confirm('Удалить этот пункт и все его подпункты?')"><button class="icon-action danger" type="submit" title="Удалить">×</button></form>
         </div>
         <form id="child-form-{{x.id}}" class="quick-child-form is-hidden" method="post" action="/maintenance/{{p.id}}/checklist/items">
@@ -68,7 +68,7 @@
     </div>
 
     {% if can('maintenance.manage') %}
-    <form method="post" action="/maintenance/{{p.id}}/checklist/items" class="quick-root-add"><input type="hidden" name="parent_id" value=""><input type="hidden" name="sort_order" value="0"><input type="hidden" name="required" value="1"><span class="quick-add-plus">＋</span><input name="title" required placeholder="Добавить новый пункт верхнего уровня"><button class="btn primary" type="submit">Добавить</button></form>
+    <form method="post" action="/maintenance/{{p.id}}/checklist/items" class="quick-root-add"><input type="hidden" name="parent_id" value=""><input type="hidden" name="sort_order" value="0"><input type="hidden" name="required" value="1"><span class="quick-add-plus"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg></span><input name="title" required placeholder="Добавить новый пункт верхнего уровня"><button class="btn primary" type="submit">Добавить</button></form>
     <p class="checklist-builder-tip">Никакие номера вводить не нужно. Создали «1», нажали у него <b>+ подпункт</b> — получите «1.1». У подпункта ещё раз <b>+ подпункт</b> — получите «1.1.1».</p>
     {% endif %}
   </details>
@@ -78,7 +78,7 @@
 
 {% if can('maintenance.manage') %}
 <section class="panel maintenance-new-card"><div class="panelhead"><div><h2>Новый план обслуживания</h2><p class="muted">FMTS сам создаст заявку от «Системы», укажет объект заявителем и рассчитает SLA относительно даты ТО.</p></div></div><form class="form maintenance-new-form" method="post" action="/maintenance/new"><div class="form-grid"><label>Оборудование<select name="equipment_id">{% for x in equipment %}<option value="{{x.id}}">{{x.inventory_no}} — {{x.name}} / {{x.site.name}}</option>{% endfor %}</select></label><label>Название<input name="name" required placeholder="Ежемесячное ТО холодильника"></label><label>Период, дней<input type="number" inputmode="numeric" name="interval_days" value="30" min="1"></label><label>Плановая дата<input type="date" name="next_run" required></label><label>Исполнитель<select name="assignee_id"><option value="">Не назначен</option>{% for x in users %}<option value="{{x.id}}">{{x.full_name}}</option>{% endfor %}</select></label></div>
-<div class="new-plan-policy"><div class="policy-heading"><span>🔔</span><div><b>Сроки и уведомления</b><small>Для планового ТО уведомления обязательны</small></div></div><div class="policy-grid"><label>Создать заявку заранее, дней<input type="number" name="create_before_days" min="0" value="7"></label><label>Первое напоминание, дней<input type="number" name="notify_before_days" min="0" value="7"></label><label>Повторное напоминание, дней<input type="number" name="repeat_notify_before_days" min="0" value="1"></label><label>SLA реакции, часов<input type="number" name="response_sla_hours" min="0" value="8"></label><label>Выполнить до<input type="time" name="due_time" value="18:00"></label><label>Допуск после даты, дней<input type="number" name="grace_days" min="0" value="1"></label></div><div class="notification-targets"><b>Уведомить</b><label class="policy-check"><input type="checkbox" name="notify_owner" value="1" checked><span>Ответственного оборудования</span></label><label class="policy-check"><input type="checkbox" name="notify_assignee" value="1" checked><span>Исполнителя</span></label><label class="policy-check"><input type="checkbox" name="notify_dispatchers" value="1" checked><span>Диспетчера / руководителя</span></label></div></div>
+<div class="new-plan-policy"><div class="policy-heading"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#bell"></use></svg></span><div><b>Сроки и уведомления</b><small>Для планового ТО уведомления обязательны</small></div></div><div class="policy-grid"><label>Создать заявку заранее, дней<input type="number" name="create_before_days" min="0" value="7"></label><label>Первое напоминание, дней<input type="number" name="notify_before_days" min="0" value="7"></label><label>Повторное напоминание, дней<input type="number" name="repeat_notify_before_days" min="0" value="1"></label><label>SLA реакции, часов<input type="number" name="response_sla_hours" min="0" value="8"></label><label>Выполнить до<input type="time" name="due_time" value="18:00"></label><label>Допуск после даты, дней<input type="number" name="grace_days" min="0" value="1"></label></div><div class="notification-targets"><b>Уведомить</b><label class="policy-check"><input type="checkbox" name="notify_owner" value="1" checked><span>Ответственного оборудования</span></label><label class="policy-check"><input type="checkbox" name="notify_assignee" value="1" checked><span>Исполнителя</span></label><label class="policy-check"><input type="checkbox" name="notify_dispatchers" value="1" checked><span>Диспетчера / руководителя</span></label></div></div>
 <input type="hidden" name="checklist" value=""><button class="btn primary">Создать план и перейти к чек-листу</button></form></section>
 {% endif %}
 

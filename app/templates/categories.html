@@ -8,11 +8,11 @@
       <div class="category-tree-row">
         <div class="category-tree-main">
           {% if node.children %}
-          <button type="button" class="category-tree-toggle" data-toggle-children="category-children-{{x.id}}" aria-label="Свернуть или раскрыть"><span>⌄</span></button>
+          <button type="button" class="category-tree-toggle" data-toggle-children="category-children-{{x.id}}" aria-label="Свернуть или раскрыть"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#chevron-down"></use></svg></span></button>
           {% else %}
           <span class="category-tree-toggle category-tree-toggle-empty"></span>
           {% endif %}
-          <span class="category-folder {% if level == 0 %}root{% endif %}">▰</span>
+          <span class="category-folder {% if level == 0 %}root{% endif %}"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#folder"></use></svg></span>
           <div class="category-tree-name">
             <b>{{x.name}}</b>
             {% if not x.active %}<span class="category-state-off">Отключена</span>{% endif %}
@@ -20,15 +20,15 @@
           </div>
         </div>
         <div class="category-tree-actions">
-          <button type="button" class="btn category-add-child" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}">＋ Подкатегория</button>
-          <button type="button" class="icon-btn category-edit-btn" data-edit-id="{{x.id}}" title="Изменить">✎</button>
+          <button type="button" class="btn category-add-child" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Подкатегория</button>
+          <button type="button" class="icon-btn category-edit-btn" data-edit-id="{{x.id}}" title="Изменить"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></button>
           <details class="category-more">
             <summary class="icon-btn" title="Дополнительно">•••</summary>
             <div class="category-more-menu">
-              <button type="button" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}" class="category-add-child menu-action">＋ Добавить подкатегорию</button>
-              <button type="button" class="category-edit-btn menu-action" data-edit-id="{{x.id}}">✎ Изменить</button>
+              <button type="button" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}" class="category-add-child menu-action"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Добавить подкатегорию</button>
+              <button type="button" class="category-edit-btn menu-action" data-edit-id="{{x.id}}"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg> Изменить</button>
               <form method="post" action="/categories/{{x.id}}/toggle">
-                <button type="submit" class="menu-action {% if x.active %}danger-soft{% else %}success-soft{% endif %}">{% if x.active %}○ Отключить{% else %}● Включить{% endif %}</button>
+                <button type="submit" class="menu-action {% if x.active %}danger-soft{% else %}success-soft{% endif %}">{% if x.active %}<span class="status-dot"></span> Отключить{% else %}<span class="status-dot live"></span> Включить{% endif %}</button>
               </form>
             </div>
           </details>
@@ -60,8 +60,8 @@
     <p>Простое дерево категорий для заявок, оборудования, базы знаний и каталога сервисов. Технический порядок FMTS ведёт автоматически.</p>
   </div>
   <div class="category-page-actions">
-    <label class="category-search"><span>⌕</span><input id="category-search-input" type="search" placeholder="Поиск по категориям…" autocomplete="off"></label>
-    <button class="btn primary" type="button" id="category-add-root">＋ Добавить категорию</button>
+    <label class="category-search"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg></span><input id="category-search-input" type="search" placeholder="Поиск по категориям…" autocomplete="off"></label>
+    <button class="btn primary" type="button" id="category-add-root"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Добавить категорию</button>
   </div>
 </div>
 
@@ -75,26 +75,26 @@
 <div class="category-layout-modern">
   <section class="panel category-tree-panel">
     <div class="panelhead category-tree-head">
-      <div><h2>Дерево категорий</h2><p class="muted">Нажмите стрелку, чтобы свернуть ветку. Для нового уровня используйте «＋ Подкатегория».</p></div>
+      <div><h2>Дерево категорий</h2><p class="muted">Нажмите стрелку, чтобы свернуть ветку. Для нового уровня используйте «<svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Подкатегория».</p></div>
       <span class="category-total">{{rows|length}} категорий</span>
     </div>
     <div class="category-tree-list-modern" id="category-tree-root">
       {% if tree %}{{ render_nodes(tree) }}{% else %}
-      <div class="category-empty-state"><div class="category-empty-icon">▰</div><h3>Категорий пока нет</h3><p>Создайте первую категорию справа. Никаких технических номеров заполнять не нужно.</p><button type="button" class="btn primary" id="category-empty-add">＋ Создать первую категорию</button></div>
+      <div class="category-empty-state"><div class="category-empty-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#folder"></use></svg></div><h3>Категорий пока нет</h3><p>Создайте первую категорию справа. Никаких технических номеров заполнять не нужно.</p><button type="button" class="btn primary" id="category-empty-add"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Создать первую категорию</button></div>
       {% endif %}
     </div>
     <div class="category-search-empty" id="category-search-empty" hidden>По вашему запросу ничего не найдено.</div>
   </section>
 
   <aside class="panel category-create-card" id="category-create-card">
-    <div class="category-create-icon">＋</div>
+    <div class="category-create-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg></div>
     <div class="panelhead category-create-head"><div><h2 id="category-create-title">Новая категория</h2><p class="muted" id="category-create-subtitle">Создайте категорию верхнего уровня или вложите её в существующую.</p></div></div>
     <form class="form category-create-form" method="post" action="/categories/new" id="category-create-form">
       <input type="hidden" name="kind" value="{{kind}}">
       <label>Название категории <span class="required-star">*</span><input id="category-new-name" name="name" required placeholder="Например: Холодильное оборудование" autocomplete="off"></label>
       <label>Родительская категория<select id="category-parent-select" name="parent_id"><option value="">Нет — корневая категория</option>{% for p in parents %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label>
       <div class="category-parent-hint" id="category-parent-hint"><span>i</span><p>Если родитель не выбран, категория появится на верхнем уровне. Порядок FMTS назначит автоматически.</p></div>
-      <button class="btn primary category-create-submit" type="submit">＋ Добавить категорию</button>
+      <button class="btn primary category-create-submit" type="submit"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Добавить категорию</button>
     </form>
   </aside>
 </div>

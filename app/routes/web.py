@@ -13,7 +13,7 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, MaintenanceChecklistItem, TicketChecklistItem, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, MaintenanceChecklistItem, TicketChecklistItem, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation, PushSubscription
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance, complete_maintenance_plan
 from app.services.maintenance_checklist import plan_checklist_rows, ticket_checklist, snapshot_checklist, ensure_plan_items_from_legacy
@@ -126,6 +126,7 @@ def ctx(request, db, **extra):
           "supported_locales":SUPPORTED_LOCALES,
           "supported_timezones":SUPPORTED_TIMEZONES,
           "timezone_options":TIMEZONE_OPTIONS,
+          "push_configured":bool(settings.push_vapid_public_key and settings.push_vapid_private_key),
           "timezone_label":timezone_label,
           "can":lambda permission: bool(u and has_permission(u,permission)),
           "nav":visible_navigation(u),
@@ -200,8 +201,10 @@ def logout(request:Request,db:Session=Depends(get_db)):
 
 @router.get("/profile", response_class=HTMLResponse)
 def profile(request:Request,db:Session=Depends(get_db)):
-    if not user_or_login(request,db): return RedirectResponse("/login",303)
-    return templates.TemplateResponse("profile.html",ctx(request,db,message=None,ok=True))
+    u=user_or_login(request,db)
+    if not u: return RedirectResponse("/login",303)
+    push_devices=db.query(PushSubscription).filter(PushSubscription.user_id==u.id,PushSubscription.active==True).order_by(PushSubscription.updated_at.desc(),PushSubscription.id.desc()).all()
+    return templates.TemplateResponse("profile.html",ctx(request,db,message=None,ok=True,push_devices=push_devices))
 
 @router.post("/profile/contact")
 def profile_contact(request:Request,email:str=Form(""),phone:str=Form(""),telegram_chat_id:str=Form(""),db:Session=Depends(get_db)):
@@ -624,7 +627,11 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
     enqueue_ticket_event(db,"ticket.updated",t,{"previous_status":old_status})
     db.commit(); db.refresh(t)
     if t.assignee_id and t.assignee_id!=old_assignee_id:
-        notify_user(db,db.get(User,t.assignee_id),f"Назначена заявка {t.number}",t.title,f"/tickets/{t.id}",dedup_key=f"assigned:{t.id}:{t.assignee_id}")
+        notify_user(db,db.get(User,t.assignee_id),f"Назначена заявка {t.number}",t.title,f"/tickets/{t.id}",dedup_key=f"assigned:{t.id}:{t.assignee_id}",event_type="assignment")
+        db.commit()
+    if status_changed and t.requester_id and t.requester_id!=u.id:
+        requester=db.get(User,t.requester_id)
+        notify_user(db,requester,f"Статус заявки {t.number}: {STATUS_LABELS.get(t.status,t.status)}",t.title,f"/tickets/{t.id}",dedup_key=f"status:{t.id}:{t.edit_version}:{t.requester_id}",event_type="status")
         db.commit()
     audit(db,request,u,"ticket.update",entity_type="ticket",entity_id=t.id,details=f"status {old_status}->{t.status}; assignee {old_assignee_id}->{t.assignee_id}; group {old_group_id}->{t.group_id}")
     push_ticket_to_1c(db,t)
@@ -761,7 +768,7 @@ def ticket_comment(ticket_id:int,request:Request,body:str=Form(""),photos:list[U
     for recipient in recipients:
         if recipient and recipient.id not in seen:
             seen.add(recipient.id)
-            notify_user(db,recipient,f"Новый комментарий в {t.number}",(text[:180] or "Прикреплено фото"),f"/tickets/{t.id}#ticket-comments")
+            notify_user(db,recipient,f"Новый комментарий в {t.number}",(text[:180] or "Прикреплено фото"),f"/tickets/{t.id}#ticket-comments",event_type="comment")
     db.commit()
     return RedirectResponse(f"/tickets/{ticket_id}#ticket-comments",303)
 
@@ -791,6 +798,10 @@ def ticket_stock(ticket_id:int,request:Request,item_id:int=Form(...),qty:float=F
     recalc_ticket_parts_cost(db,t)
     db.commit(); db.refresh(t)
     audit(db,request,u,"stock.issue",entity_type="ticket",entity_id=t.id,details=f"item={item.sku}; qty={qty}; unit_cost={unit_cost}; amount={amount}")
+    if item.qty <= item.min_qty:
+        from app.services.notifications import notify_role
+        notify_role(db,{"dispatcher","manager","admin"},f"Низкий остаток ЗИП: {item.name}",f"Остаток {item.qty:g} {item.unit}, минимум {item.min_qty:g} {item.unit}",f"/inventory/{item.id}",level="warning",dedup_prefix=f"inventory-low:{item.id}:{int(item.qty*1000)}",event_type="inventory")
+        db.commit()
     push_ticket_to_1c(db,t)
     return RedirectResponse(f"/tickets/{ticket_id}",303)
 

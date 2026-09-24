@@ -8,7 +8,7 @@
 {% elif kind == 'text' %}
   <iframe class="attachment-frame text-frame" src="/attachments/{{attachment.id}}/raw" title="{{attachment.filename}}"></iframe>
 {% else %}
-  <div class="attachment-unsupported"><div class="attachment-doc-icon">▤</div><h2>{{attachment.filename}}</h2><p>Этот формат браузер не умеет безопасно показывать внутри FMTS. Файл не скачивается автоматически — при необходимости используйте кнопку «Скачать».</p><small>{{mime}}</small></div>
+  <div class="attachment-unsupported"><div class="attachment-doc-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#file"></use></svg></div><h2>{{attachment.filename}}</h2><p>Этот формат браузер не умеет безопасно показывать внутри FMTS. Файл не скачивается автоматически — при необходимости используйте кнопку «Скачать».</p><small>{{mime}}</small></div>
 {% endif %}
 </section>
 {% endblock %}

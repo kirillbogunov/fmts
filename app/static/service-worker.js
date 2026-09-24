@@ -1,5 +1,5 @@
-const CACHE = 'fmts-v07612-mobile-dock';
-const STATIC = ['/static/app.css','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
+const CACHE = 'fmts-v07614-svg-mobile';
+const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));
   self.skipWaiting();
@@ -23,7 +23,7 @@ self.addEventListener('fetch', event => {
 self.addEventListener('push', event => {
   let data={title:'FMTS',body:'Новое уведомление',link:'/notifications'};
   try { if(event.data) data={...data,...event.data.json()}; } catch(e) {}
-  event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:'/static/icon-192.png',badge:'/static/icon-192.png',data:{link:data.link||'/notifications'}}));
+  event.waitUntil(self.registration.showNotification(data.title,{body:data.body,icon:'/static/icon-192.png',badge:'/static/icon-192.png',tag:data.tag||undefined,renotify:false,timestamp:Date.now(),data:{link:data.link||'/notifications',level:data.level||'info'}}));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();

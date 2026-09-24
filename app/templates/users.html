@@ -10,7 +10,7 @@
   <div class="pagehead-actions">
     <a class="btn" href="/users/roles">Роли и права</a>
     <a class="btn" href="/audit">Журнал контроля</a>
-    <a class="btn primary" href="/users/new">＋ Новый пользователь</a>
+    <a class="btn primary" href="/users/new"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Новый пользователь</a>
   </div>
 </div>
 
@@ -30,7 +30,7 @@
 
 <section class="users-toolbar panel">
   <div class="users-search-wrap">
-    <span class="users-search-icon">⌕</span>
+    <span class="users-search-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg></span>
     <input id="users-search" type="search" placeholder="Найти сотрудника, логин, e-mail или телефон" autocomplete="off">
   </div>
   <select id="users-role-filter" aria-label="Фильтр по роли">
@@ -80,10 +80,10 @@
     </div>
 
     {% if x.username == '__system__' or x.directory_source == 'system' %}
-    <div class="system-account-note"><span>⚙</span><div><b>Системная учётная запись</b><small>Используется FMTS для автоматических заявок и фоновых операций.</small></div></div>
+    <div class="system-account-note"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg></span><div><b>Системная учётная запись</b><small>Используется FMTS для автоматических заявок и фоновых операций.</small></div></div>
     {% else %}
     <details class="user-edit-disclosure">
-      <summary><span>Редактировать</span><b>Настройки сотрудника</b><i>⌄</i></summary>
+      <summary><span>Редактировать</span><b>Настройки сотрудника</b><i><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#chevron-down"></use></svg></i></summary>
       <form class="user-settings-form" method="post" action="/users/{{x.id}}/update">
         <div class="user-settings-grid">
           <label><span>E-mail</span><input type="email" name="email" value="{{x.email}}" placeholder="user@company.kz"></label>
@@ -102,7 +102,7 @@
 </section>
 
 <div class="users-empty-state" id="users-empty-state" hidden>
-  <div>⌕</div><h3>Ничего не найдено</h3><p>Измените поиск или фильтры.</p>
+  <div><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg></div><h3>Ничего не найдено</h3><p>Измените поиск или фильтры.</p>
 </div>
 {% endblock %}
 {% block extra_scripts %}

@@ -74,11 +74,11 @@ def apply_ticket_rules(db:Session,ticket:Ticket)->list[str]:
         if ticket.group_id:
             sync_group_observers(db,ticket)
         if a.get('notify_manager'):
-            notify_role(db,{'manager','admin'},f'Автоматизация: {ticket.number}',rule.name,f'/tickets/{ticket.id}',dedup_prefix=f'rule:{rule.id}:ticket:{ticket.id}')
+            notify_role(db,{'manager','admin'},f'Автоматизация: {ticket.number}',rule.name,f'/tickets/{ticket.id}',dedup_prefix=f'rule:{rule.id}:ticket:{ticket.id}',event_type='general')
         applied.append(rule.name)
     if ticket.assignee_id:
         assignee=db.get(User,ticket.assignee_id)
-        notify_user(db,assignee,f'Назначена заявка {ticket.number}',ticket.title,f'/tickets/{ticket.id}',dedup_key=f'assigned:{ticket.id}:{ticket.assignee_id}')
+        notify_user(db,assignee,f'Назначена заявка {ticket.number}',ticket.title,f'/tickets/{ticket.id}',dedup_key=f'assigned:{ticket.id}:{ticket.assignee_id}',event_type='assignment')
     return applied
 
 def process_sla_escalations(db:Session)->int:
@@ -90,8 +90,8 @@ def process_sla_escalations(db:Session)->int:
             db.add(SlaEvent(ticket_id=t.id,event_type=f'resolution_{kind}',event_key=key)); created+=1
             title=(f'Просрочена заявка {t.number}' if kind=='overdue' else f'SLA решения скоро истекает: {t.number}')
             body=f'{t.title} · {t.site.name if t.site else ""}'
-            if t.assignee_id: notify_user(db,db.get(User,t.assignee_id),title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_key=f'sla:{key}:tech')
-            notify_role(db,{'dispatcher','manager','admin'},title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_prefix=f'sla:{key}')
+            if t.assignee_id: notify_user(db,db.get(User,t.assignee_id),title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_key=f'sla:{key}:tech',event_type='sla')
+            notify_role(db,{'dispatcher','manager','admin'},title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_prefix=f'sla:{key}',event_type='sla')
     response_rows=db.query(Ticket).filter(Ticket.status.notin_({'closed','cancelled'}),Ticket.first_response_at.is_(None),Ticket.response_due_at.is_not(None),Ticket.response_due_at<=warn_at).all()
     for t in response_rows:
         kind='overdue' if t.response_due_at and t.response_due_at<now else 'warning'; key=f'{t.id}:response:{kind}'
@@ -99,5 +99,5 @@ def process_sla_escalations(db:Session)->int:
         db.add(SlaEvent(ticket_id=t.id,event_type=f'response_{kind}',event_key=key)); created+=1
         title=(f'Просрочен SLA реакции: {t.number}' if kind=='overdue' else f'SLA реакции скоро истекает: {t.number}')
         body=f'{t.title} · требуется первая реакция исполнителя'
-        notify_role(db,{'dispatcher','manager','admin'},title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_prefix=f'sla:{key}')
+        notify_role(db,{'dispatcher','manager','admin'},title,body,f'/tickets/{t.id}',level='danger' if kind=='overdue' else 'warning',dedup_prefix=f'sla:{key}',event_type='sla')
     db.commit(); return created

@@ -373,3 +373,59 @@ _original_run_lightweight_migrations_v076 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v076(engine)
     _run_v0762_maintenance_policy(engine)
+
+# v0.7.6.13: mobile Web Push preferences and device metadata.
+def _run_v07613_push(engine: Engine) -> None:
+    user_cols = _columns(engine, "users")
+    if user_cols:
+        additions = {
+            "push_enabled": "BOOLEAN DEFAULT TRUE",
+            "push_assignments": "BOOLEAN DEFAULT TRUE",
+            "push_comments": "BOOLEAN DEFAULT TRUE",
+            "push_status": "BOOLEAN DEFAULT TRUE",
+            "push_sla": "BOOLEAN DEFAULT TRUE",
+            "push_maintenance": "BOOLEAN DEFAULT TRUE",
+            "push_reminders": "BOOLEAN DEFAULT TRUE",
+            "push_inventory": "BOOLEAN DEFAULT FALSE",
+            "push_general": "BOOLEAN DEFAULT TRUE",
+            "push_quiet_start": "VARCHAR(5) DEFAULT ''",
+            "push_quiet_end": "VARCHAR(5) DEFAULT ''",
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in user_cols:
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+            conn.execute(text("UPDATE users SET push_enabled=TRUE WHERE push_enabled IS NULL"))
+            conn.execute(text("UPDATE users SET push_assignments=TRUE WHERE push_assignments IS NULL"))
+            conn.execute(text("UPDATE users SET push_comments=TRUE WHERE push_comments IS NULL"))
+            conn.execute(text("UPDATE users SET push_status=TRUE WHERE push_status IS NULL"))
+            conn.execute(text("UPDATE users SET push_sla=TRUE WHERE push_sla IS NULL"))
+            conn.execute(text("UPDATE users SET push_maintenance=TRUE WHERE push_maintenance IS NULL"))
+            conn.execute(text("UPDATE users SET push_reminders=TRUE WHERE push_reminders IS NULL"))
+            conn.execute(text("UPDATE users SET push_inventory=FALSE WHERE push_inventory IS NULL"))
+            conn.execute(text("UPDATE users SET push_general=TRUE WHERE push_general IS NULL"))
+            conn.execute(text("UPDATE users SET push_quiet_start='' WHERE push_quiet_start IS NULL"))
+            conn.execute(text("UPDATE users SET push_quiet_end='' WHERE push_quiet_end IS NULL"))
+
+    push_cols = _columns(engine, "push_subscriptions")
+    if push_cols:
+        dt_type = "DATETIME NULL" if engine.dialect.name == "sqlite" else "TIMESTAMP NULL"
+        additions = {
+            "device_name": "VARCHAR(160) DEFAULT ''",
+            "user_agent": "TEXT DEFAULT ''",
+            "active": "BOOLEAN DEFAULT TRUE",
+            "updated_at": dt_type,
+        }
+        with engine.begin() as conn:
+            for name, ddl in additions.items():
+                if name not in push_cols:
+                    conn.execute(text(f"ALTER TABLE push_subscriptions ADD COLUMN {name} {ddl}"))
+            conn.execute(text("UPDATE push_subscriptions SET active=TRUE WHERE active IS NULL"))
+            conn.execute(text("UPDATE push_subscriptions SET updated_at=created_at WHERE updated_at IS NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_push_subscriptions_user_active ON push_subscriptions (user_id, active)"))
+
+_original_run_lightweight_migrations_v0762 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v0762(engine)
+    _run_v07613_push(engine)

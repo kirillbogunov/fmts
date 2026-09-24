@@ -26,6 +26,17 @@ class User(Base):
     hourly_rate: Mapped[Decimal] = mapped_column(Numeric(12,2), default=0)
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Almaty")
     locale: Mapped[str] = mapped_column(String(10), default="ru")
+    push_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_assignments: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_comments: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_status: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_sla: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_maintenance: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_reminders: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_inventory: Mapped[bool] = mapped_column(Boolean, default=False)
+    push_general: Mapped[bool] = mapped_column(Boolean, default=True)
+    push_quiet_start: Mapped[str] = mapped_column(String(5), default="")
+    push_quiet_end: Mapped[str] = mapped_column(String(5), default="")
 
 class Site(Base):
     __tablename__ = "sites"
@@ -393,7 +404,11 @@ class PushSubscription(Base):
     endpoint: Mapped[str] = mapped_column(Text)
     p256dh: Mapped[str] = mapped_column(Text, default="")
     auth: Mapped[str] = mapped_column(Text, default="")
+    device_name: Mapped[str] = mapped_column(String(160), default="")
+    user_agent: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     user: Mapped[User] = relationship()
 
 class TicketLink(Base):

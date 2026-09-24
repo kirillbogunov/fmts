@@ -10,7 +10,7 @@
 </style>
 </head>
 <body>
-<div class="toolbar"><button onclick="window.print()">🖨 Печать этикетки</button><a href="/equipment/{{eq.id}}">← К оборудованию</a></div>
+<div class="toolbar"><button onclick="window.print()"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#print"></use></svg> Печать этикетки</button><a href="/equipment/{{eq.id}}">← К оборудованию</a></div>
 <div class="sheet"><div class="label"><img src="/equipment/{{eq.id}}/label.svg" alt="Этикетка {{eq.inventory_no}}"></div></div>
 <div class="help">Размер макета: 80 × 100 мм. В диалоге печати используйте масштаб 100% для сохранения размера.</div>
 </body>

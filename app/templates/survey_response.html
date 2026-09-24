@@ -4,13 +4,13 @@
 <div class="pagehead"><div><div class="eyebrow">КАЧЕСТВО ОБСЛУЖИВАНИЯ</div><h1>Оцените выполненную работу</h1><p>Заявка {{ticket.number}} · {{ticket.title}}</p></div></div>
 <section class="panel survey-card survey-public-card">
 {% if message %}<div class="alert">{{message}}</div>
-{% elif existing %}<div class="survey-success"><div class="survey-success-icon">✓</div><strong>Спасибо за обратную связь</strong><p>Анкета уже заполнена. Итоговая оценка: <b>{{existing.score}} / 5</b>.</p><a class="btn" href="/tickets/{{ticket.id}}">Вернуться к заявке</a></div>
-{% elif not survey %}<div class="survey-empty-state"><div>☆</div><h3>Анкета не настроена</h3><p>Для этой заявки активная анкета качества пока не назначена.</p></div>
+{% elif existing %}<div class="survey-success"><div class="survey-success-icon"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg></div><strong>Спасибо за обратную связь</strong><p>Анкета уже заполнена. Итоговая оценка: <b>{{existing.score}} / 5</b>.</p><a class="btn" href="/tickets/{{ticket.id}}">Вернуться к заявке</a></div>
+{% elif not survey %}<div class="survey-empty-state"><div><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#survey"></use></svg></div><h3>Анкета не настроена</h3><p>Для этой заявки активная анкета качества пока не назначена.</p></div>
 {% else %}
-<div class="survey-public-head"><span>✓ Заявка выполнена</span><h2>{{survey.name}}</h2><p>Это займёт меньше минуты и поможет улучшить качество обслуживания.</p></div>
+<div class="survey-public-head"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#check"></use></svg> Заявка выполнена</span><h2>{{survey.name}}</h2><p>Это займёт меньше минуты и поможет улучшить качество обслуживания.</p></div>
 <form class="form survey-form" method="post">
 {% for q in questions %}<div class="survey-question"><div class="survey-question-label"><b>{{loop.index}}. {{q.label}}</b>{% if q.required is not defined or q.required %}<span>Обязательный</span>{% endif %}</div>
-{% if q.type=='rating' %}{% set qidx=loop.index0 %}<div class="rating-input">{% for n in range(1,6) %}<label><input type="radio" name="q_{{qidx}}" value="{{n}}" {% if q.required is not defined or q.required %}required{% endif %}><span>★</span><small>{{n}}</small></label>{% endfor %}</div>
+{% if q.type=='rating' %}{% set qidx=loop.index0 %}<div class="rating-input">{% for n in range(1,6) %}<label><input type="radio" name="q_{{qidx}}" value="{{n}}" {% if q.required is not defined or q.required %}required{% endif %}><span><svg class="ui-icon survey-rating-star" aria-hidden="true"><use href="/static/icons.svg#star"></use></svg></span><small>{{n}}</small></label>{% endfor %}</div>
 {% elif q.type=='yesno' %}<div class="survey-public-yesno"><label><input type="radio" name="q_{{loop.index0}}" value="Да" {% if q.required is not defined or q.required %}required{% endif %}><span>Да</span></label><label><input type="radio" name="q_{{loop.index0}}" value="Нет" {% if q.required is not defined or q.required %}required{% endif %}><span>Нет</span></label></div>
 {% else %}<textarea name="q_{{loop.index0}}" rows="4" placeholder="Напишите ответ..." {% if q.required %}required{% endif %}></textarea>{% endif %}</div>{% endfor %}
 <div class="survey-public-actions"><button class="btn primary">Отправить оценку</button><a class="btn" href="/tickets/{{ticket.id}}">Вернуться без оценки</a></div>
