@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v07617-staff-schedules';
+const CACHE = 'fmts-v07618-staff-schedule-layout';
 const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));

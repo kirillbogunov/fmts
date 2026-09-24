@@ -67,16 +67,18 @@
         {% for day in weekly %}
         <div class="schedule-day-card {% if not day.available %}day-off{% endif %}" data-schedule-day="{{day.weekday}}">
           <div class="schedule-day-top">
-            <div><b>{{day.label}}</b><small class="schedule-day-state">{{'Рабочий день' if day.available else 'Выходной'}}</small></div>
+            <div class="schedule-day-name">
+              <span class="schedule-day-dot">{{day.label[:1]}}</span>
+              <div><b>{{day.label}}</b><small class="schedule-day-state">{{'Рабочий день' if day.available else 'Выходной'}}</small></div>
+            </div>
             <label class="switch-control" aria-label="{{day.label}} рабочий день">
               <input type="checkbox" name="available_{{day.weekday}}" value="1" {% if day.available %}checked{% endif %}>
               <span></span>
             </label>
           </div>
           <div class="schedule-time-row">
-            <label>С<input type="time" name="start_{{day.weekday}}" value="{{day.start_time}}"></label>
-            <span>—</span>
-            <label>До<input type="time" name="end_{{day.weekday}}" value="{{day.end_time}}"></label>
+            <label><span>Начало</span><input type="time" name="start_{{day.weekday}}" value="{{day.start_time}}"></label>
+            <label><span>Окончание</span><input type="time" name="end_{{day.weekday}}" value="{{day.end_time}}"></label>
           </div>
         </div>
         {% endfor %}
