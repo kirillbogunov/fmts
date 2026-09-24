@@ -19,7 +19,7 @@ from app.security import current_user
 from app.access import has_permission
 from app.routes.web import ctx, templates, forbidden
 from app.services.audit import audit
-from app.services.categories import category_options, category_path
+from app.services.categories import category_options, category_path, build_category_tree, next_category_sort_order
 from app.services.time_tracking import apply_session_cost, recalculate_ticket_labor_cost, format_duration, money
 
 router = APIRouter()
@@ -304,13 +304,14 @@ def categories_page(request: Request, kind: str = 'ticket', db: Session = Depend
         return forbidden(request, db, u, 'settings.manage')
     if kind not in {'ticket','equipment','knowledge','service'}:
         kind = 'ticket'
-    rows = db.query(CategoryNode).filter(CategoryNode.kind == kind).order_by(CategoryNode.sort_order, CategoryNode.name).all()
+    rows = db.query(CategoryNode).filter(CategoryNode.kind == kind).order_by(CategoryNode.sort_order, CategoryNode.name, CategoryNode.id).all()
     paths = {x.id: category_path(db, x) for x in rows}
-    return templates.TemplateResponse('categories.html', ctx(request, db, rows=rows, paths=paths, kind=kind, parents=category_options(db, kind, True)))
+    tree = build_category_tree(rows)
+    return templates.TemplateResponse('categories.html', ctx(request, db, rows=rows, tree=tree, paths=paths, kind=kind, parents=category_options(db, kind, True)))
 
 
 @router.post('/categories/new')
-def category_new(request: Request, kind: str = Form('ticket'), name: str = Form(...), parent_id: str = Form(''), sort_order: int = Form(100), db: Session = Depends(get_db)):
+def category_new(request: Request, kind: str = Form('ticket'), name: str = Form(...), parent_id: str = Form(''), sort_order: str = Form(''), db: Session = Depends(get_db)):
     u = _user(request, db)
     if not u:
         return RedirectResponse('/login', 303)
@@ -321,15 +322,20 @@ def category_new(request: Request, kind: str = Form('ticket'), name: str = Form(
     parent = db.get(CategoryNode, int(parent_id)) if parent_id else None
     if parent and parent.kind != kind:
         parent = None
-    if name and not db.query(CategoryNode).filter(CategoryNode.kind == kind, CategoryNode.name == name, CategoryNode.parent_id == (parent.id if parent else None)).first():
-        row = CategoryNode(kind=kind, name=name, code=name.lower().replace(' ','_')[:180], parent_id=parent.id if parent else None, sort_order=sort_order, active=True)
+    parent_value = parent.id if parent else None
+    if name and not db.query(CategoryNode).filter(CategoryNode.kind == kind, CategoryNode.name == name, CategoryNode.parent_id == parent_value).first():
+        try:
+            order_value = int(sort_order) if str(sort_order).strip() else next_category_sort_order(db, kind, parent_value)
+        except Exception:
+            order_value = next_category_sort_order(db, kind, parent_value)
+        row = CategoryNode(kind=kind, name=name, code=name.lower().replace(' ','_')[:180], parent_id=parent_value, sort_order=order_value, active=True)
         db.add(row); db.commit(); db.refresh(row)
         audit(db, request, u, 'category.create', entity_type='category', entity_id=row.id, details=category_path(db,row))
     return RedirectResponse(f'/categories?kind={kind}', 303)
 
 
 @router.post('/categories/{category_id}/update')
-def category_update(category_id: int, request: Request, name: str = Form(...), parent_id: str = Form(''), sort_order: int = Form(100), active: str = Form(''), db: Session = Depends(get_db)):
+def category_update(category_id: int, request: Request, name: str = Form(...), parent_id: str = Form(''), sort_order: str = Form(''), active: str = Form('1'), db: Session = Depends(get_db)):
     u = _user(request, db)
     if not u:
         return RedirectResponse('/login', 303)
@@ -342,12 +348,35 @@ def category_update(category_id: int, request: Request, name: str = Form(...), p
     parent = db.get(CategoryNode, requested_parent) if requested_parent else None
     if parent and (parent.kind != row.kind or _would_cycle(db, row.id, parent.id)):
         parent = None
+    old_parent_id = row.parent_id
     row.name = name.strip() or row.name
     row.parent_id = parent.id if parent else None
-    row.sort_order = sort_order
+    if str(sort_order).strip():
+        try:
+            row.sort_order = int(sort_order)
+        except Exception:
+            pass
+    elif old_parent_id != row.parent_id:
+        row.sort_order = next_category_sort_order(db, row.kind, row.parent_id)
     row.active = active == '1'
     db.commit()
     audit(db, request, u, 'category.update', entity_type='category', entity_id=row.id, details=category_path(db,row))
+    return RedirectResponse(f'/categories?kind={row.kind}', 303)
+
+
+@router.post('/categories/{category_id}/toggle')
+def category_toggle(category_id: int, request: Request, db: Session = Depends(get_db)):
+    u = _user(request, db)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not has_permission(u, 'settings.manage'):
+        return forbidden(request, db, u, 'settings.manage')
+    row = db.get(CategoryNode, category_id)
+    if not row:
+        return RedirectResponse('/categories', 303)
+    row.active = not bool(row.active)
+    db.commit()
+    audit(db, request, u, 'category.toggle', entity_type='category', entity_id=row.id, details=f"active={row.active}; path={category_path(db,row)}")
     return RedirectResponse(f'/categories?kind={row.kind}', 303)
 
 

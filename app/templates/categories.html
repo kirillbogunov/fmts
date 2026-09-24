@@ -1,6 +1,176 @@
-{% extends "base.html" %}{% block title %}Классификаторы — {{app_name}}{% endblock %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">SERVICE DESK / СПРАВОЧНИКИ</div><h1>Иерархические категории</h1><p>Дерево классификации для заявок, оборудования, базы знаний и каталога сервисов.</p></div></div>
-<nav class="category-tabs"><a class="{% if kind=='ticket' %}active{% endif %}" href="/categories?kind=ticket">Заявки</a><a class="{% if kind=='equipment' %}active{% endif %}" href="/categories?kind=equipment">Оборудование</a><a class="{% if kind=='knowledge' %}active{% endif %}" href="/categories?kind=knowledge">База знаний</a><a class="{% if kind=='service' %}active{% endif %}" href="/categories?kind=service">Сервисы</a></nav>
-<div class="grid2 wide-left"><section class="panel"><div class="panelhead"><div><h2>Дерево категорий</h2><p class="muted">Полный путь автоматически используется в формах.</p></div></div><div class="category-tree-list">{% for x in rows %}<form class="category-row" method="post" action="/categories/{{x.id}}/update"><div class="category-path"><span class="category-depth">{% for _ in range(paths[x.id].count(' / ')) %}↳{% endfor %}</span><b>{{paths[x.id]}}</b>{% if not x.active %}<span class="badge">Отключена</span>{% endif %}</div><input name="name" value="{{x.name}}" required><select name="parent_id"><option value="">Корневая категория</option>{% for p in parents %}{% if p.id != x.id %}<option value="{{p.id}}" {% if x.parent_id==p.id %}selected{% endif %}>{{p.name}}</option>{% endif %}{% endfor %}</select><input type="number" name="sort_order" value="{{x.sort_order}}" aria-label="Порядок"><label class="inline-check"><input type="checkbox" name="active" value="1" {% if x.active %}checked{% endif %}> активна</label><button class="btn">Сохранить</button></form>{% else %}<p class="muted">Категорий пока нет.</p>{% endfor %}</div></section>
-<section class="panel"><h2>Новая категория</h2><form class="form compact" method="post" action="/categories/new"><input type="hidden" name="kind" value="{{kind}}"><label>Название<input name="name" required placeholder="Например: Холодильное оборудование"></label><label>Родитель<select name="parent_id"><option value="">Корневая категория</option>{% for p in parents %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label><label>Порядок<input type="number" name="sort_order" value="100"></label><button class="btn primary">+ Добавить</button></form><p class="muted category-help">Пример: <b>Холодильное оборудование → Бонеты → Морозильные</b>. В заявке и карточке оборудования сохранится полный путь.</p></section></div>
+{% extends "base.html" %}
+{% block title %}Классификаторы — {{app_name}}{% endblock %}
+{% block content %}
+{% macro render_nodes(nodes, level=0) %}
+  {% for node in nodes %}
+    {% set x = node.row %}
+    <div class="category-tree-item {% if not x.active %}is-inactive{% endif %}" data-category-item data-search="{{ paths[x.id]|lower }}" data-id="{{x.id}}" style="--category-depth:{{level}}">
+      <div class="category-tree-row">
+        <div class="category-tree-main">
+          {% if node.children %}
+          <button type="button" class="category-tree-toggle" data-toggle-children="category-children-{{x.id}}" aria-label="Свернуть или раскрыть"><span>⌄</span></button>
+          {% else %}
+          <span class="category-tree-toggle category-tree-toggle-empty"></span>
+          {% endif %}
+          <span class="category-folder {% if level == 0 %}root{% endif %}">▰</span>
+          <div class="category-tree-name">
+            <b>{{x.name}}</b>
+            {% if not x.active %}<span class="category-state-off">Отключена</span>{% endif %}
+            {% if level > 0 %}<small>{{paths[x.id]}}</small>{% endif %}
+          </div>
+        </div>
+        <div class="category-tree-actions">
+          <button type="button" class="btn category-add-child" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}">＋ Подкатегория</button>
+          <button type="button" class="icon-btn category-edit-btn" data-edit-id="{{x.id}}" title="Изменить">✎</button>
+          <details class="category-more">
+            <summary class="icon-btn" title="Дополнительно">•••</summary>
+            <div class="category-more-menu">
+              <button type="button" data-parent-id="{{x.id}}" data-parent-name="{{x.name}}" class="category-add-child menu-action">＋ Добавить подкатегорию</button>
+              <button type="button" class="category-edit-btn menu-action" data-edit-id="{{x.id}}">✎ Изменить</button>
+              <form method="post" action="/categories/{{x.id}}/toggle">
+                <button type="submit" class="menu-action {% if x.active %}danger-soft{% else %}success-soft{% endif %}">{% if x.active %}○ Отключить{% else %}● Включить{% endif %}</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <form class="category-inline-editor" id="category-editor-{{x.id}}" method="post" action="/categories/{{x.id}}/update" hidden>
+        <input type="hidden" name="active" value="{{1 if x.active else 0}}">
+        <div class="category-edit-grid">
+          <label>Название<input name="name" value="{{x.name}}" required></label>
+          <label>Родительская категория<select name="parent_id"><option value="">Нет — корневой уровень</option>{% for p in parents %}{% if p.id != x.id %}<option value="{{p.id}}" {% if x.parent_id==p.id %}selected{% endif %}>{{p.name}}</option>{% endif %}{% endfor %}</select></label>
+        </div>
+        <div class="category-editor-actions"><button class="btn primary" type="submit">Сохранить</button><button type="button" class="btn category-edit-cancel" data-edit-id="{{x.id}}">Отмена</button></div>
+      </form>
+
+      {% if node.children %}
+      <div class="category-tree-children" id="category-children-{{x.id}}">
+        {{ render_nodes(node.children, level + 1) }}
+      </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endmacro %}
+
+<div class="pagehead category-pagehead">
+  <div>
+    <div class="eyebrow">SERVICE DESK / СПРАВОЧНИКИ</div>
+    <h1>Иерархические категории</h1>
+    <p>Простое дерево категорий для заявок, оборудования, базы знаний и каталога сервисов. Технический порядок FMTS ведёт автоматически.</p>
+  </div>
+  <div class="category-page-actions">
+    <label class="category-search"><span>⌕</span><input id="category-search-input" type="search" placeholder="Поиск по категориям…" autocomplete="off"></label>
+    <button class="btn primary" type="button" id="category-add-root">＋ Добавить категорию</button>
+  </div>
+</div>
+
+<nav class="category-tabs category-tabs-modern">
+  <a class="{% if kind=='ticket' %}active{% endif %}" href="/categories?kind=ticket"><span>Заявки</span><small>проблемы и работы</small></a>
+  <a class="{% if kind=='equipment' %}active{% endif %}" href="/categories?kind=equipment"><span>Оборудование</span><small>типы активов</small></a>
+  <a class="{% if kind=='knowledge' %}active{% endif %}" href="/categories?kind=knowledge"><span>База знаний</span><small>статьи и инструкции</small></a>
+  <a class="{% if kind=='service' %}active{% endif %}" href="/categories?kind=service"><span>Сервисы</span><small>каталог услуг</small></a>
+</nav>
+
+<div class="category-layout-modern">
+  <section class="panel category-tree-panel">
+    <div class="panelhead category-tree-head">
+      <div><h2>Дерево категорий</h2><p class="muted">Нажмите стрелку, чтобы свернуть ветку. Для нового уровня используйте «＋ Подкатегория».</p></div>
+      <span class="category-total">{{rows|length}} категорий</span>
+    </div>
+    <div class="category-tree-list-modern" id="category-tree-root">
+      {% if tree %}{{ render_nodes(tree) }}{% else %}
+      <div class="category-empty-state"><div class="category-empty-icon">▰</div><h3>Категорий пока нет</h3><p>Создайте первую категорию справа. Никаких технических номеров заполнять не нужно.</p><button type="button" class="btn primary" id="category-empty-add">＋ Создать первую категорию</button></div>
+      {% endif %}
+    </div>
+    <div class="category-search-empty" id="category-search-empty" hidden>По вашему запросу ничего не найдено.</div>
+  </section>
+
+  <aside class="panel category-create-card" id="category-create-card">
+    <div class="category-create-icon">＋</div>
+    <div class="panelhead category-create-head"><div><h2 id="category-create-title">Новая категория</h2><p class="muted" id="category-create-subtitle">Создайте категорию верхнего уровня или вложите её в существующую.</p></div></div>
+    <form class="form category-create-form" method="post" action="/categories/new" id="category-create-form">
+      <input type="hidden" name="kind" value="{{kind}}">
+      <label>Название категории <span class="required-star">*</span><input id="category-new-name" name="name" required placeholder="Например: Холодильное оборудование" autocomplete="off"></label>
+      <label>Родительская категория<select id="category-parent-select" name="parent_id"><option value="">Нет — корневая категория</option>{% for p in parents %}<option value="{{p.id}}">{{p.name}}</option>{% endfor %}</select></label>
+      <div class="category-parent-hint" id="category-parent-hint"><span>i</span><p>Если родитель не выбран, категория появится на верхнем уровне. Порядок FMTS назначит автоматически.</p></div>
+      <button class="btn primary category-create-submit" type="submit">＋ Добавить категорию</button>
+    </form>
+  </aside>
+</div>
+
+<script>
+(function(){
+  const search=document.getElementById('category-search-input');
+  const empty=document.getElementById('category-search-empty');
+  const createCard=document.getElementById('category-create-card');
+  const createTitle=document.getElementById('category-create-title');
+  const createSubtitle=document.getElementById('category-create-subtitle');
+  const newName=document.getElementById('category-new-name');
+  const parentSelect=document.getElementById('category-parent-select');
+  const parentHint=document.getElementById('category-parent-hint');
+
+  function openCreate(parentId='', parentName=''){
+    parentSelect.value=parentId || '';
+    if(parentId){
+      createTitle.textContent='Новая подкатегория';
+      createSubtitle.textContent='Будет создана внутри «'+parentName+'».';
+      parentHint.querySelector('p').textContent='Родитель уже выбран: «'+parentName+'». При необходимости его можно изменить.';
+    }else{
+      createTitle.textContent='Новая категория';
+      createSubtitle.textContent='Создайте категорию верхнего уровня или вложите её в существующую.';
+      parentHint.querySelector('p').textContent='Если родитель не выбран, категория появится на верхнем уровне. Порядок FMTS назначит автоматически.';
+    }
+    createCard.scrollIntoView({behavior:'smooth',block:'start'});
+    window.setTimeout(()=>newName.focus(),250);
+  }
+
+  document.getElementById('category-add-root')?.addEventListener('click',()=>openCreate());
+  document.getElementById('category-empty-add')?.addEventListener('click',()=>openCreate());
+  document.querySelectorAll('.category-add-child').forEach(btn=>btn.addEventListener('click',(e)=>{
+    e.preventDefault(); e.stopPropagation();
+    document.querySelectorAll('.category-more[open]').forEach(x=>x.removeAttribute('open'));
+    openCreate(btn.dataset.parentId,btn.dataset.parentName);
+  }));
+
+  document.querySelectorAll('.category-edit-btn').forEach(btn=>btn.addEventListener('click',(e)=>{
+    e.preventDefault(); e.stopPropagation();
+    const form=document.getElementById('category-editor-'+btn.dataset.editId);
+    if(!form)return;
+    const willOpen=form.hidden;
+    document.querySelectorAll('.category-inline-editor').forEach(x=>x.hidden=true);
+    form.hidden=!willOpen;
+    if(willOpen){form.querySelector('input[name=name]')?.focus(); form.scrollIntoView({behavior:'smooth',block:'nearest'});}
+    document.querySelectorAll('.category-more[open]').forEach(x=>x.removeAttribute('open'));
+  }));
+  document.querySelectorAll('.category-edit-cancel').forEach(btn=>btn.addEventListener('click',()=>{
+    const form=document.getElementById('category-editor-'+btn.dataset.editId); if(form)form.hidden=true;
+  }));
+
+  document.querySelectorAll('[data-toggle-children]').forEach(btn=>{
+    const id=btn.dataset.toggleChildren, children=document.getElementById(id);
+    const storageKey='fmts.category.collapsed.'+id;
+    if(localStorage.getItem(storageKey)==='1'){children.hidden=true;btn.classList.add('collapsed');}
+    btn.addEventListener('click',()=>{children.hidden=!children.hidden;btn.classList.toggle('collapsed',children.hidden);localStorage.setItem(storageKey,children.hidden?'1':'0');});
+  });
+
+  function filterItem(item,q){
+    const childrenBox=Array.from(item.children).find(x=>x.classList && x.classList.contains('category-tree-children'));
+    const children=childrenBox ? Array.from(childrenBox.children).filter(x=>x.classList.contains('category-tree-item')) : [];
+    let childMatch=false;
+    children.forEach(child=>{if(filterItem(child,q))childMatch=true;});
+    const own=(item.dataset.search||'').includes(q);
+    const match=own||childMatch;
+    item.hidden=!match;
+    if(q && childMatch && childrenBox){childrenBox.hidden=false;item.querySelector(':scope > .category-tree-row .category-tree-toggle')?.classList.remove('collapsed');}
+    return match;
+  }
+  search?.addEventListener('input',()=>{
+    const q=search.value.trim().toLowerCase();
+    let any=false;
+    document.querySelectorAll('#category-tree-root > .category-tree-item').forEach(item=>{if(filterItem(item,q))any=true;});
+    empty.hidden=any || !q;
+  });
+})();
+</script>
 {% endblock %}
