@@ -46,7 +46,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "maintenance.view_all", "maintenance.manage",
         "inventory.view",
         "contractor.view", "contractor.manage",
-        "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "report.builder",
+        "profile.self", "knowledge.view", "knowledge.manage", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "report.builder",
         "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester", "data.import", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self", "itsm.view", "cmdb.relation.manage",
     },
     ROLE_MANAGER: {
@@ -56,7 +56,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "ticket.contractor", "ticket.cost", "ticket.materials.view", "ticket.close", "ticket.cancel",
         "site.view", "equipment.view", "maintenance.view_all", "inventory.view",
         "contractor.view", "kpi.all", "audit.view",
-        "profile.self", "knowledge.view", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "approval.decide", "report.builder",
+        "profile.self", "knowledge.view", "knowledge.manage", "service.view", "notifications.view", "ticket.link", "approval.request", "resource.view", "resource.book", "survey.respond", "subscription.self", "approval.decide", "report.builder",
         "ticket.bulk", "ticket.observe", "ticket.template", "team.manage", "ticket.set_requester",
         "labor.report", "labor.rate.manage", "resource.view", "resource.book", "resource.manage", "survey.manage", "subscription.self", "itsm.view", "sla.manage", "cmdb.relation.manage",
     },

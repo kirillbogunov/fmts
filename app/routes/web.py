@@ -1,5 +1,5 @@
 from __future__ import annotations
-import base64, csv, io, json, mimetypes, os, secrets, textwrap, hmac
+import base64, csv, io, json, mimetypes, os, secrets, textwrap, hmac, re
 from datetime import datetime, date, timedelta
 from html import escape as html_escape
 from pathlib import Path
@@ -13,9 +13,10 @@ import qrcode
 from io import BytesIO
 from app.db import get_db
 from app.config import get_settings
-from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation
+from app.models import User, Site, Equipment, Ticket, TicketComment, Attachment, MaintenancePlan, MaintenanceChecklistItem, TicketChecklistItem, InventoryItem, StockMovement, Contractor, UiStyle, TicketWorkSession, AuditLog, ServiceCatalog, CustomField, TicketCustomValue, KnowledgeArticle, TicketLink, ApprovalRequest, TicketFeedback, SavedFilter, Notification, SupportGroup, SupportGroupMember, TicketObserver, TicketTemplate, TicketStatusHistory, TicketReminder, Department, BusinessCalendar, EquipmentRelation
 from app.security import verify_password, current_user, hash_password, verify_totp
 from app.services.maintenance import next_ticket_number, generate_due_maintenance
+from app.services.maintenance_checklist import plan_checklist_rows, ticket_checklist, snapshot_checklist, ensure_plan_items_from_legacy
 from app.services.one_c import OneCClient
 from app.services.sync import push_ticket_to_1c
 from app.labels import STATUS_LABELS, PRIORITY_LABELS, ROLE_LABELS, EQUIPMENT_STATUS_LABELS
@@ -112,6 +113,7 @@ def ctx(request, db, **extra):
     base={"request":request,"user":u,"app_name":settings.app_name,"now":datetime.now(),
           "status_labels":STATUS_LABELS,"priority_labels":PRIORITY_LABELS,
           "role_labels":ROLE_LABELS,"equipment_status_labels":EQUIPMENT_STATUS_LABELS,
+          "criticality_labels":{"low":"Низкая","normal":"Обычная","high":"Высокая","critical":"Критическая"},
           "ui_styles":ui,"settings":settings,
           "app_version":settings.app_version,"developer_name":settings.developer_name,
           "developer_telegram":settings.developer_telegram,"developer_url":settings.developer_url,
@@ -274,7 +276,7 @@ def dashboard(request:Request, db:Session=Depends(get_db)):
         "low_stock":low_stock,
         "recent":recent,
         "by_status":by_status,
-        "status_chart_data":[[status,int(count)] for status,count in by_status],
+        "status_chart_data":[[STATUS_LABELS.get(status,status),int(count)] for status,count in by_status],
         "total_count":total_count,
         "done_count":done_count,
         "dashboard_rings":dashboard_rings,
@@ -357,7 +359,14 @@ def tickets(request:Request,status:str="",q:str="",priority:str="",site_id:str="
     if q: query=query.filter((Ticket.title.contains(q)) | (Ticket.number.contains(q)) | (Ticket.description.contains(q)) | (Ticket.requester_name.contains(q)))
     rows=query.order_by(Ticket.id.desc()).all()
     time_totals=ticket_time_totals(db,[x.id for x in rows])
-    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,ticket_type=ticket_type,ticket_types=TICKET_TYPES,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all(),support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.bulk") else []))
+    now_utc=datetime.utcnow()
+    ticket_stats={
+        "total":len(rows),"new":sum(1 for x in rows if x.status=="new"),
+        "active":sum(1 for x in rows if x.status in {"assigned","in_progress"}),
+        "waiting":sum(1 for x in rows if x.status=="waiting"),
+        "overdue":sum(1 for x in rows if x.status not in {"resolved","closed","cancelled","waiting"} and x.sla_due_at and x.sla_due_at<now_utc),
+    }
+    return templates.TemplateResponse("tickets.html",ctx(request,db,tickets=rows,time_totals=time_totals,ticket_stats=ticket_stats,status=status,q=q,priority=priority,site_id=site_id,assignee_id=assignee_id,ticket_type=ticket_type,ticket_types=TICKET_TYPES,status_options=options_for(db,"status",list(STATUS_LABELS.items())),priority_options=options_for(db,"priority",list(PRIORITY_LABELS.items())),sites=db.query(Site).order_by(Site.name).all(),technicians=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all(),support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.bulk") else []))
 
 @router.get("/tickets/new", response_class=HTMLResponse)
 def ticket_new(request:Request,equipment_id:int|None=None,db:Session=Depends(get_db)):
@@ -451,6 +460,15 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     if not t: return RedirectResponse("/tickets",303)
     if not can_view_ticket(u,t,db):
         return forbidden(request,db,u,"ticket.view", "Эта заявка не входит в область доступа вашей роли")
+    if not t.maintenance_plan_id and t.description:
+        marker=re.search(r"\[ППР:(\d+):",t.description)
+        if marker:
+            plan=db.get(MaintenancePlan,int(marker.group(1)))
+            if plan:
+                t.maintenance_plan_id=plan.id; snapshot_checklist(db,plan,t); db.commit(); db.refresh(t)
+    elif t.maintenance_plan_id and not db.query(TicketChecklistItem.id).filter(TicketChecklistItem.ticket_id==t.id).first():
+        plan=db.get(MaintenancePlan,t.maintenance_plan_id)
+        if plan: snapshot_checklist(db,plan,t); db.commit(); db.refresh(t)
     work_time=ticket_time_summary(db,t.id)
     active_session=next((x for x in work_time["active"] if x.user_id==u.id),None)
     allowed=allowed_statuses(u,t)
@@ -461,6 +479,7 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
     lifecycle=status_timeline(db,t)
     reminders=db.query(TicketReminder).filter(TicketReminder.ticket_id==t.id,TicketReminder.user_id==u.id,TicketReminder.completed_at.is_(None)).order_by(TicketReminder.remind_at).all()
     sla_display_due=effective_sla_due(t)
+    maintenance_checklist_state=ticket_checklist(db,t.id)
     return templates.TemplateResponse("ticket_detail.html",ctx(request,db,ticket=t,work_time=work_time,active_session=active_session,
         can_track=can_track_ticket_time(u,t),users=technicians,contractors=db.query(Contractor).order_by(Contractor.name).all() if has_permission(u,"contractor.view") or has_permission(u,"ticket.contractor") else [],
         inventory=db.query(InventoryItem).order_by(InventoryItem.name).all() if has_permission(u,"inventory.view") else [],status_options=status_options,
@@ -477,7 +496,7 @@ def ticket_detail(ticket_id:int,request:Request,db:Session=Depends(get_db)):
         observers=db.query(TicketObserver).filter(TicketObserver.ticket_id==t.id).order_by(TicketObserver.id).all(),
         participant_users=db.query(User).filter(User.active==True).order_by(User.full_name).all() if has_permission(u,"ticket.observe") else [],
         support_groups=db.query(SupportGroup).filter(SupportGroup.active==True).order_by(SupportGroup.name).all() if has_permission(u,"ticket.assign") else [],
-        lifecycle=lifecycle,reminders=reminders,sla_display_due=sla_display_due,ticket_types=TICKET_TYPES))
+        lifecycle=lifecycle,reminders=reminders,sla_display_due=sla_display_due,ticket_types=TICKET_TYPES,maintenance_checklist=maintenance_checklist_state))
 
 @router.post("/tickets/{ticket_id}/update")
 def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id:str=Form(""),group_id:str=Form(""),contractor_id:str=Form(""),labor_cost:float=Form(0),master_comment:str=Form(""),edit_version:int=Form(1),db:Session=Depends(get_db)):
@@ -559,6 +578,17 @@ def ticket_update(ticket_id:int,request:Request,status:str=Form(...),assignee_id
     if effective_status in {"assigned","in_progress","waiting","resolved","closed"} and t.assignee_id is None and t.group_id is None and t.contractor_id is None:
         return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.workflow",message="Для этого статуса сначала назначьте техника или подрядчика"),status_code=400)
     if effective_status in {"resolved","closed"}:
+        if not db.query(TicketChecklistItem.id).filter(TicketChecklistItem.ticket_id==t.id).first():
+            plan=None
+            if t.maintenance_plan_id: plan=db.get(MaintenancePlan,t.maintenance_plan_id)
+            elif t.description:
+                marker=re.search(r"\[ППР:(\d+):",t.description)
+                if marker: plan=db.get(MaintenancePlan,int(marker.group(1)))
+            if plan:
+                t.maintenance_plan_id=plan.id; snapshot_checklist(db,plan,t); db.flush()
+        checklist_state=ticket_checklist(db,t.id)
+        if checklist_state["total"] and not checklist_state["complete"]:
+            return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.workflow",message=f"Перед выполнением ТО необходимо пройти обязательный чек-лист: {checklist_state['required_completed']} из {checklist_state['required_total']}"),status_code=400)
         if not (t.master_comment or "").strip():
             return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="ticket.workflow",message="Перед выполнением/закрытием обязателен комментарий мастера о выполненной работе"),status_code=400)
         if t.assignee_id is not None:
@@ -944,7 +974,11 @@ def maintenance(request:Request,db:Session=Depends(get_db)):
         plans=db.query(MaintenancePlan).filter(MaintenancePlan.assignee_id==u.id).order_by(MaintenancePlan.next_run).all()
     else:
         return forbidden(request,db,u,"maintenance.view_assigned")
-    return templates.TemplateResponse("maintenance.html",ctx(request,db,plans=plans,equipment=db.query(Equipment).order_by(Equipment.name).all() if has_permission(u,"maintenance.manage") else [],users=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"maintenance.manage") else []))
+    converted=0
+    for p in plans: converted+=ensure_plan_items_from_legacy(db,p)
+    if converted: db.commit()
+    checklist_by_plan={p.id:plan_checklist_rows(db,p.id) for p in plans}
+    return templates.TemplateResponse("maintenance.html",ctx(request,db,plans=plans,checklist_by_plan=checklist_by_plan,equipment=db.query(Equipment).order_by(Equipment.name).all() if has_permission(u,"maintenance.manage") else [],users=db.query(User).filter(User.role=="technician",User.active==True).order_by(User.full_name).all() if has_permission(u,"maintenance.manage") else []))
 
 @router.post("/maintenance/new")
 def maintenance_new(request:Request,equipment_id:int=Form(...),name:str=Form(...),interval_days:int=Form(30),next_run:str=Form(...),assignee_id:str=Form(""),checklist:str=Form(""),db:Session=Depends(get_db)):
@@ -956,8 +990,15 @@ def maintenance_new(request:Request,equipment_id:int=Form(...),name:str=Form(...
         if not tech or not tech.active or tech.role!="technician": return templates.TemplateResponse("forbidden.html",ctx(request,db,permission="maintenance.manage",message="Исполнителем ППР может быть только активный техник"),status_code=400)
     items=[x.strip() for x in checklist.splitlines() if x.strip()]
     plan=MaintenancePlan(equipment_id=equipment_id,name=name,interval_days=interval_days,next_run=date.fromisoformat(next_run),assignee_id=int(assignee_id) if assignee_id else None,checklist=json.dumps(items,ensure_ascii=False))
-    db.add(plan); db.commit(); db.refresh(plan); audit(db,request,u,"maintenance.create",entity_type="maintenance",entity_id=plan.id,details=name)
-    return RedirectResponse("/maintenance",303)
+    db.add(plan); db.flush()
+    for idx,title in enumerate(items,1):
+        # Number prefixes are display hints only; hierarchy is managed explicitly afterwards.
+        clean=title.strip()
+        import re as _re
+        clean=_re.sub(r'^\s*(?:\d+(?:\.\d+)*[.)]?|[-–—•*])\s*','',clean).strip() or title
+        db.add(MaintenanceChecklistItem(plan_id=plan.id,title=clean,sort_order=idx*10,required=True,active=True))
+    db.commit(); db.refresh(plan); audit(db,request,u,"maintenance.create",entity_type="maintenance",entity_id=plan.id,details=name)
+    return RedirectResponse(f"/maintenance#plan-{plan.id}",303)
 
 @router.post("/maintenance/generate")
 def maintenance_gen(request:Request,db:Session=Depends(get_db)):
@@ -1033,8 +1074,13 @@ def inventory_detail(item_id:int, request:Request, db:Session=Depends(get_db)):
         "movement_count":len(issue_rows),
         "current_value":current_value,
     }
+    top_usage=usage_by_ticket[:6]
+    chart_usage_labels=[x["ticket"].number for x in top_usage]
+    chart_usage_values=[round(float(x["qty"]),3) for x in top_usage]
+    stock_chart={"current":round(float(item.qty or 0),3),"issued":round(float(issued_qty),3),"minimum":round(float(item.min_qty or 0),3)}
     return templates.TemplateResponse("inventory_detail.html",ctx(
         request,db,item=item,issue_rows=issue_rows,usage_by_ticket=usage_by_ticket,stats=stats,
+        chart_usage_labels=chart_usage_labels,chart_usage_values=chart_usage_values,stock_chart=stock_chart,
     ))
 
 @router.post("/inventory/new")

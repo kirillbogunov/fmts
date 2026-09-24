@@ -29,6 +29,17 @@
 <div class="facts two"><div><span>Заявитель</span><b>{{ticket.requester_name or (ticket.requester.full_name if ticket.requester else '—')}}</b></div><div><span>Создатель заявки</span><b>{{ticket.creator.full_name if ticket.creator else (ticket.requester.full_name if ticket.requester else '—')}}</b></div>{% if user.role != 'requester' %}<div><span>Телефон</span><b>{% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')}}">{{ticket.requester_phone}}</a>{% else %}—{% endif %}</b></div>{% endif %}{% if ticket.group %}<div><span>Группа исполнителей</span><b>{{ticket.group.name}}</b></div>{% endif %}<div><span>Тип обращения</span><b>{{ticket_types.get(ticket.ticket_type,ticket.ticket_type)}}</b></div><div><span>SLA реакции</span><b>{% if ticket.first_response_at %}Первая реакция {{fmt_dt(ticket.first_response_at)}}{% elif ticket.response_due_at %}до {{fmt_dt(ticket.response_due_at)}}{% else %}—{% endif %}</b></div>{% if ticket.ticket_type=='change' %}<div><span>Плановое окно</span><b>{% if ticket.planned_start_at %}{{fmt_dt(ticket.planned_start_at)}}{% if ticket.planned_end_at %} → {{fmt_dt(ticket.planned_end_at)}}{% endif %}{% else %}—{% endif %}</b></div>{% endif %}{% if settings.onec_enabled and can('integration.manage') %}<div><span>1С GUID</span><b>{{ticket.one_c_id or '—'}}</b></div><div><span>Синхронизация 1С</span><b>{% if ticket.onec_sync_error %}Ошибка: {{ticket.onec_sync_error}}{% elif ticket.onec_synced_at %}{{ticket.onec_synced_at.strftime('%d.%m.%Y %H:%M')}}{% else %}—{% endif %}</b></div>{% endif %}</div>
 {% if ticket.attachments %}<div class="attachment-grid ticket-files">{% for f in ticket.attachments %}{% if not f.comment_id %}<a class="attachment-card" href="/attachments/{{f.id}}" target="_blank" rel="noopener">{% if attachment_kind(f.filename)=='image' %}<img src="/attachments/{{f.id}}/raw" alt="{{f.filename}}">{% else %}<span class="attachment-card-icon">▤</span>{% endif %}<b>{{f.filename}}</b><small>Открыть</small></a>{% endif %}{% endfor %}</div>{% endif %}</section>
 
+{% if maintenance_checklist.total %}
+<section class="panel maintenance-run-card" id="maintenance-checklist">
+  <div class="panelhead maintenance-run-head"><div><div class="eyebrow">ТО / ППР</div><h2>Чек-лист обслуживания</h2><p class="muted">Проходите пункты по порядку. Обязательные пункты должны быть отмечены до закрытия заявки.</p></div><div class="checklist-progress-ring" id="checklist-progress-ring" style="--percent:{{maintenance_checklist.percent}}"><span id="checklist-progress-percent">{{maintenance_checklist.percent}}%</span></div></div>
+  <div class="checklist-progress-line"><i id="checklist-progress-bar" style="width:{{maintenance_checklist.percent}}%"></i></div><div class="checklist-progress-copy"><b id="checklist-progress-count">{{maintenance_checklist.completed}} из {{maintenance_checklist.total}}</b><span>{% if maintenance_checklist.complete %}Обязательная часть выполнена{% else %}Осталось обязательных: {{maintenance_checklist.required_total-maintenance_checklist.required_completed}}{% endif %}</span></div>
+  <div class="maintenance-run-list">
+  {% for row in maintenance_checklist.rows %}<label class="maintenance-check-item {% if row.completed %}is-done{% endif %}" style="--depth:{{row.depth}}" data-check-item="{{row.id}}"><input class="maintenance-check-input" type="checkbox" {% if row.completed %}checked{% endif %} {% if user.role=='requester' %}disabled{% endif %} data-url="/tickets/{{ticket.id}}/maintenance-checklist/{{row.id}}/toggle"><span class="maintenance-check-box">✓</span><span class="maintenance-check-number">{{row.number}}</span><span class="maintenance-check-copy"><b>{{row.title}}</b>{% if row.instructions %}<small>{{row.instructions}}</small>{% endif %}{% if row.completed_at %}<em>Выполнил: {{row.completed_by.full_name if row.completed_by else '—'}} · {{fmt_dt(row.completed_at)}}</em>{% endif %}</span>{% if row.required %}<span class="maintenance-check-required">обяз.</span>{% endif %}</label>{% endfor %}
+  </div>
+  {% if user.role!='requester' %}<div class="checklist-mobile-hint">На телефоне просто отмечайте выполненные операции — прогресс сохраняется сразу.</div>{% endif %}
+</section>
+{% endif %}
+
 {% if user.role in ['technician','dispatcher','manager','admin'] %}
 <section class="panel time-panel" id="ticket-time">
   <div class="panelhead time-panel-head"><div><h2>Учёт времени работ</h2><p class="muted">Фактическое время ремонтных работ.</p></div><div class="time-total"><span>ВСЕГО</span><strong id="ticket-time-total" data-base-seconds="{{work_time.total_seconds}}" data-running="{{'1' if active_session else '0'}}">{{work_time.total_label}}</strong></div></div>
@@ -120,6 +131,19 @@
 <script>
 function prepareReminderUtc(form){const local=document.getElementById('reminder-local');const hidden=document.getElementById('reminder-utc');if(!local||!hidden||!local.value)return false;const d=new Date(local.value);if(Number.isNaN(d.getTime()))return false;hidden.value=d.toISOString().slice(0,19);return true;}
 document.querySelectorAll('.local-datetime[data-utc]').forEach(el=>{const d=new Date(el.dataset.utc);if(!Number.isNaN(d.getTime()))el.textContent=d.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});});
+</script>
+<script>
+(function(){
+  const inputs=[...document.querySelectorAll('.maintenance-check-input')]; if(!inputs.length)return;
+  const bar=document.getElementById('checklist-progress-bar'),pct=document.getElementById('checklist-progress-percent'),ring=document.getElementById('checklist-progress-ring'),count=document.getElementById('checklist-progress-count');
+  async function updateMaintenanceChecklist(input){
+    const desired=input.checked; input.disabled=true; const body=new URLSearchParams(); body.set('completed',desired?'1':'0');
+    try{const r=await fetch(input.dataset.url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'fetch'},body:body.toString()});const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'Ошибка сохранения');
+      input.closest('.maintenance-check-item').classList.toggle('is-done',data.completed); if(bar)bar.style.width=data.percent+'%';if(pct)pct.textContent=data.percent+'%';if(ring)ring.style.setProperty('--percent',data.percent);if(count)count.textContent=data.done+' из '+data.total;
+    }catch(e){input.checked=!desired;alert(e.message||'Не удалось сохранить пункт чек-листа');}finally{input.disabled=false;}
+  }
+  inputs.forEach(x=>x.addEventListener('change',()=>updateMaintenanceChecklist(x)));
+})();
 </script>
 <script>(function(){const total=document.getElementById('ticket-time-total');const summary=document.getElementById('ticket-time-summary');if(!total||total.dataset.running!=='1')return;let seconds=parseInt(total.dataset.baseSeconds||'0',10)||0;const format=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return h?`${h} ч ${String(m).padStart(2,'0')} мин`:m?`${m} мин ${String(sec).padStart(2,'0')} сек`:`${sec} сек`;};setInterval(()=>{seconds++;total.textContent=format(seconds);if(summary)summary.textContent=format(seconds);},1000);})();</script>
 {% endblock %}

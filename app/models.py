@@ -76,6 +76,7 @@ class Ticket(Base):
     creator_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     group_id: Mapped[int | None] = mapped_column(ForeignKey("support_groups.id"), nullable=True, index=True)
     template_id: Mapped[int | None] = mapped_column(ForeignKey("ticket_templates.id"), nullable=True, index=True)
+    maintenance_plan_id: Mapped[int | None] = mapped_column(ForeignKey("maintenance_plans.id"), nullable=True, index=True)
     sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     sla_paused_seconds: Mapped[int] = mapped_column(Integer, default=0)
     edit_version: Mapped[int] = mapped_column(Integer, default=1)
@@ -165,6 +166,39 @@ class MaintenancePlan(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     equipment: Mapped[Equipment] = relationship()
     assignee: Mapped[User | None] = relationship()
+
+class MaintenanceChecklistItem(Base):
+    __tablename__ = "maintenance_checklist_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("maintenance_plans.id"), index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("maintenance_checklist_items.id"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    instructions: Mapped[str] = mapped_column(Text, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    plan: Mapped[MaintenancePlan] = relationship()
+
+class TicketChecklistItem(Base):
+    __tablename__ = "ticket_checklist_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    source_item_id: Mapped[int | None] = mapped_column(ForeignKey("maintenance_checklist_items.id"), nullable=True, index=True)
+    parent_snapshot_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    number: Mapped[str] = mapped_column(String(40), default="")
+    title: Mapped[str] = mapped_column(String(300))
+    instructions: Mapped[str] = mapped_column(Text, default="")
+    depth: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    note: Mapped[str] = mapped_column(String(500), default="")
+    ticket: Mapped[Ticket] = relationship()
+    source_item: Mapped[MaintenanceChecklistItem | None] = relationship()
+    completed_by: Mapped[User | None] = relationship()
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"
@@ -304,6 +338,19 @@ class KnowledgeArticle(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     service: Mapped[ServiceCatalog | None] = relationship()
     created_by: Mapped[User | None] = relationship()
+
+class KnowledgeAttachment(Base):
+    __tablename__ = "knowledge_attachments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(ForeignKey("knowledge_articles.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    stored_name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    content_type: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    article: Mapped[KnowledgeArticle] = relationship()
+    uploaded_by: Mapped[User | None] = relationship()
 
 class AutomationRule(Base):
     __tablename__ = "automation_rules"

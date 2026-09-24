@@ -1,16 +1,17 @@
 from __future__ import annotations
-import json, qrcode
+import json, qrcode, mimetypes, secrets
 from collections import defaultdict
 from datetime import datetime, timedelta
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import urlencode
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
-from fastapi.responses import RedirectResponse, HTMLResponse, Response, JSONResponse
+from fastapi import APIRouter, Depends, Request, Form, HTTPException, UploadFile, File
+from fastapi.responses import RedirectResponse, HTMLResponse, Response, JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.config import get_settings
 from app.models import (User, Site, Equipment, Ticket, ServiceCatalog, CustomField, TicketCustomValue,
-    KnowledgeArticle, AutomationRule, Notification, PushSubscription, TicketLink, ApprovalRequest,
+    KnowledgeArticle, KnowledgeAttachment, AutomationRule, Notification, PushSubscription, TicketLink, ApprovalRequest,
     TicketFeedback, SavedFilter, ReportSubscription, TechnicianAvailability, BusinessCalendar)
 from app.security import current_user, generate_totp_secret, verify_totp, totp_uri
 from app.access import has_permission, can_view_ticket, scope_ticket_query
@@ -75,6 +76,25 @@ async def push_subscribe(request:Request,db:Session=Depends(get_db)):
     return {'ok':True}
 
 # ---------- Knowledge base ----------
+KNOWLEDGE_EXTENSIONS={'.docx','.pdf','.png','.jpg','.jpeg','.webp','.gif'}
+KNOWLEDGE_MAX_BYTES=20*1024*1024
+
+def _save_knowledge_file(upload:UploadFile) -> tuple[str,str,str,int]:
+    filename=Path(upload.filename or 'file').name[:255]; ext=Path(filename).suffix.lower()
+    if ext not in KNOWLEDGE_EXTENSIONS: raise ValueError('Разрешены DOCX, PDF, PNG, JPG, WEBP и GIF')
+    data=upload.file.read(KNOWLEDGE_MAX_BYTES+1)
+    if not data: raise ValueError('Пустой файл')
+    if len(data)>KNOWLEDGE_MAX_BYTES: raise ValueError('Файл превышает 20 МБ')
+    folder=Path(settings.upload_dir)/'knowledge'; folder.mkdir(parents=True,exist_ok=True)
+    stored=f"{secrets.token_hex(18)}{ext}"; (folder/stored).write_bytes(data)
+    mime=mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    return filename,f'knowledge/{stored}',mime,len(data)
+
+def _knowledge_path(row:KnowledgeAttachment)->Path|None:
+    root=Path(settings.upload_dir).resolve(); path=(root/row.stored_name).resolve()
+    if root not in path.parents or not path.exists(): return None
+    return path
+
 @router.get('/knowledge',response_class=HTMLResponse)
 def knowledge_page(request:Request,q:str='',db:Session=Depends(get_db)):
     u=user_or_login(request,db)
@@ -95,16 +115,72 @@ def knowledge_detail(article_id:int,request:Request,db:Session=Depends(get_db)):
     if denied:return denied
     row=db.get(KnowledgeArticle,article_id)
     if not row:return RedirectResponse('/knowledge',303)
-    return templates.TemplateResponse('knowledge_detail.html',ctx(request,db,article=row))
+    return templates.TemplateResponse('knowledge_detail.html',ctx(request,db,article=row,knowledge_files=db.query(KnowledgeAttachment).filter(KnowledgeAttachment.article_id==row.id).order_by(KnowledgeAttachment.created_at.desc()).all()))
 
 @router.post('/knowledge/new')
-def knowledge_new(request:Request,title:str=Form(...),body:str=Form(''),tags:str=Form(''),equipment_category:str=Form(''),service_id:str=Form(''),db:Session=Depends(get_db)):
+def knowledge_new(request:Request,title:str=Form(...),body:str=Form(''),tags:str=Form(''),equipment_category:str=Form(''),service_id:str=Form(''),files:list[UploadFile]|None=File(None),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
     if not has_permission(u,'knowledge.manage'): return forbidden(request,db,u,'knowledge.manage')
     row=KnowledgeArticle(title=title,body=body,tags=tags,equipment_category=equipment_category,service_id=int(service_id) if service_id else None,created_by_id=u.id)
-    db.add(row);db.commit();audit(db,request,u,'knowledge.create','knowledge',row.id,details=title)
+    db.add(row);db.flush()
+    errors=[]
+    for upload in (files or []):
+        if not upload or not upload.filename: continue
+        try:
+            filename,stored,mime,size=_save_knowledge_file(upload); db.add(KnowledgeAttachment(article_id=row.id,filename=filename,stored_name=stored,content_type=mime,size_bytes=size,uploaded_by_id=u.id))
+        except ValueError as exc: errors.append(str(exc))
+    db.commit();audit(db,request,u,'knowledge.create','knowledge',row.id,details=f'{title}; files={len(files or [])}; errors={len(errors)}')
     return RedirectResponse(f'/knowledge/{row.id}',303)
+
+@router.post('/knowledge/{article_id}/attachments')
+def knowledge_attachment_add(article_id:int,request:Request,files:list[UploadFile]|None=File(None),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'knowledge.manage'): return forbidden(request,db,u,'knowledge.manage')
+    article=db.get(KnowledgeArticle,article_id)
+    if not article:return RedirectResponse('/knowledge',303)
+    for upload in (files or []):
+        if not upload or not upload.filename: continue
+        try:
+            filename,stored,mime,size=_save_knowledge_file(upload); db.add(KnowledgeAttachment(article_id=article.id,filename=filename,stored_name=stored,content_type=mime,size_bytes=size,uploaded_by_id=u.id))
+        except ValueError: continue
+    article.updated_at=datetime.utcnow();db.commit();audit(db,request,u,'knowledge.attachment.add','knowledge',article.id)
+    return RedirectResponse(f'/knowledge/{article.id}#knowledge-files',303)
+
+@router.get('/knowledge/attachments/{attachment_id}/raw')
+def knowledge_attachment_raw(attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return Response(status_code=401)
+    if not has_permission(u,'knowledge.view'):return Response(status_code=403)
+    row=db.get(KnowledgeAttachment,attachment_id); path=_knowledge_path(row) if row else None
+    if not row or not path:return Response(status_code=404)
+    mime=row.content_type or 'application/octet-stream'
+    inline=mime if (mime.startswith('image/') or mime=='application/pdf') else 'application/octet-stream'
+    return FileResponse(str(path),filename=row.filename,media_type=inline,content_disposition_type='inline')
+
+@router.get('/knowledge/attachments/{attachment_id}/download')
+def knowledge_attachment_download(attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return Response(status_code=401)
+    if not has_permission(u,'knowledge.view'):return Response(status_code=403)
+    row=db.get(KnowledgeAttachment,attachment_id); path=_knowledge_path(row) if row else None
+    if not row or not path:return Response(status_code=404)
+    return FileResponse(str(path),filename=row.filename,media_type=row.content_type or 'application/octet-stream',content_disposition_type='attachment')
+
+@router.post('/knowledge/{article_id}/attachments/{attachment_id}/delete')
+def knowledge_attachment_delete(article_id:int,attachment_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'knowledge.manage'):return forbidden(request,db,u,'knowledge.manage')
+    row=db.get(KnowledgeAttachment,attachment_id)
+    if row and row.article_id==article_id:
+        path=_knowledge_path(row); db.delete(row);db.commit()
+        if path:
+            try:path.unlink()
+            except OSError:pass
+        audit(db,request,u,'knowledge.attachment.delete','knowledge',article_id,details=f'attachment={attachment_id}')
+    return RedirectResponse(f'/knowledge/{article_id}#knowledge-files',303)
 
 # ---------- Service catalog and custom forms ----------
 @router.get('/services',response_class=HTMLResponse)

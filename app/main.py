@@ -18,6 +18,7 @@ from app.routes.admin_services import router as admin_services_router
 from app.routes.assets_plus import router as assets_plus_router
 from app.routes.experience import router as experience_router
 from app.routes.itsm_plus import router as itsm_plus_router
+from app.routes.maintenance_plus import router as maintenance_plus_router
 from app.services.maintenance import generate_due_maintenance
 from app.services.reference_data import ensure_default_reference_data
 from app.security import current_user
@@ -100,6 +101,7 @@ app.include_router(admin_services_router)
 app.include_router(assets_plus_router)
 app.include_router(experience_router)
 app.include_router(itsm_plus_router)
+app.include_router(maintenance_plus_router)
 app.include_router(web_router)
 
 

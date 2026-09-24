@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models import MaintenancePlan, Ticket
 from app.services.ticket_lifecycle import ensure_initial_history
+from app.services.maintenance_checklist import snapshot_checklist
 
 def next_ticket_number(db: Session) -> str:
     today = datetime.now().strftime("%y%m%d")
@@ -28,10 +29,10 @@ def generate_due_maintenance(db: Session) -> int:
             title=f"ППР: {plan.name} — {eq.name}",
             description=f"Плановая работа по оборудованию {eq.inventory_no}. {marker}\nЧек-лист: {plan.checklist}",
             category="ППР/ТО", priority="normal", status="new",
-            site_id=eq.site_id, equipment_id=eq.id, assignee_id=plan.assignee_id,
+            site_id=eq.site_id, equipment_id=eq.id, assignee_id=plan.assignee_id, maintenance_plan_id=plan.id,
             sla_due_at=datetime.combine(plan.next_run, datetime.min.time()) + timedelta(hours=23),
         )
-        db.add(ticket); db.flush(); ensure_initial_history(db,ticket,source="maintenance")
+        db.add(ticket); db.flush(); ensure_initial_history(db,ticket,source="maintenance"); snapshot_checklist(db,plan,ticket)
         created_tickets.append(ticket)
         plan.last_run = plan.next_run
         plan.next_run = plan.next_run + timedelta(days=plan.interval_days)

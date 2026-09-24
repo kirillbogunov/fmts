@@ -326,3 +326,17 @@ _original_run_lightweight_migrations_v074 = run_lightweight_migrations
 def run_lightweight_migrations(engine: Engine) -> None:
     _original_run_lightweight_migrations_v074(engine)
     _run_v075_itsm(engine)
+
+# v0.7.6: interactive maintenance checklists and knowledge attachments.
+def _run_v076_mobile_checklists(engine: Engine) -> None:
+    ticket_cols = _columns(engine, "tickets")
+    if ticket_cols and "maintenance_plan_id" not in ticket_cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN maintenance_plan_id INTEGER NULL"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tickets_maintenance_plan_id ON tickets (maintenance_plan_id)"))
+
+_original_run_lightweight_migrations_v075 = run_lightweight_migrations
+
+def run_lightweight_migrations(engine: Engine) -> None:
+    _original_run_lightweight_migrations_v075(engine)
+    _run_v076_mobile_checklists(engine)
