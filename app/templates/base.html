@@ -91,11 +91,29 @@
 </footer></main>
 </div>
 <nav class="mobile-bottom-nav" aria-label="Основная навигация">
-  <a href="/" class="{% if path == '/' %}active{% endif %}"><span>⌂</span><small>{{tr('dashboard')}}</small></a>
-  <a href="/tickets" class="{% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}"><span>☑</span><small>{{tr('tickets')}}</small></a>
-  {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-create {% if path == '/tickets/new' %}active{% endif %}"><span>＋</span><small>Создать</small></a>{% endif %}
-  {% if nav.maintenance %}<a href="/maintenance" class="{% if path.startswith('/maintenance') %}active{% endif %}"><span>↻</span><small>{{tr('maintenance')}}</small></a>{% endif %}
-  {% if nav.notifications %}<a href="/notifications" class="{% if path.startswith('/notifications') %}active{% endif %}"><span>◌</span><small>{{tr('notifications')}}{% if unread_notifications %} {{unread_notifications}}{% endif %}</small></a>{% else %}<a href="/profile" class="{% if path.startswith('/profile') %}active{% endif %}"><span>♙</span><small>{{tr('profile')}}</small></a>{% endif %}
+  <a href="/" class="mobile-nav-item {% if path == '/' %}active{% endif %}" aria-label="Дашборд">
+    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v9.7a.5.5 0 0 1-.5.5h-5.8v-6.3H9.3V21H3.5a.5.5 0 0 1-.5-.5z"/></svg></span>
+    <small>{{tr('dashboard')}}</small>
+  </a>
+  <a href="/tickets" class="mobile-nav-item {% if path == '/tickets' or (path.startswith('/tickets/') and path != '/tickets/new') %}active{% endif %}" aria-label="Заявки">
+    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4.5h8M9 3h6a1 1 0 0 1 1 1v2H8V4a1 1 0 0 1 1-1Zm-3 3h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm2 5h8M8 15h8"/></svg></span>
+    <small>{{tr('tickets')}}</small>
+  </a>
+  {% if can('ticket.create') %}<a href="/tickets/new" class="mobile-nav-item mobile-create {% if path == '/tickets/new' %}active{% endif %}" aria-label="Создать заявку">
+    <span class="mobile-nav-icon mobile-create-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+    <small>Создать</small>
+  </a>{% endif %}
+  {% if nav.maintenance %}<a href="/maintenance" class="mobile-nav-item {% if path.startswith('/maintenance') %}active{% endif %}" aria-label="ТО и ППР">
+    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.2 8.5A7 7 0 0 1 18.8 7L20 9M4 15l1.2 2A7 7 0 0 0 17.8 15.5"/></svg></span>
+    <small>ТО / ППР</small>
+  </a>{% endif %}
+  {% if nav.notifications %}<a href="/notifications" class="mobile-nav-item {% if path.startswith('/notifications') %}active{% endif %}" aria-label="Уведомления">
+    <span class="mobile-nav-icon mobile-bell-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>{% if unread_notifications %}<b class="mobile-nav-badge">{{unread_notifications}}</b>{% endif %}</span>
+    <small>{{tr('notifications')}}</small>
+  </a>{% else %}<a href="/profile" class="mobile-nav-item {% if path.startswith('/profile') %}active{% endif %}" aria-label="Профиль">
+    <span class="mobile-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7 8a7 7 0 0 0-14 0"/></svg></span>
+    <small>{{tr('profile')}}</small>
+  </a>{% endif %}
 </nav>
 {% else %}{% block anonymous %}{% endblock %}
 <footer class="public-footer">Разработчик: <b>{{ developer_name }}</b> © 2026 · Telegram: <a href="{{ developer_url }}" target="_blank" rel="noopener">{{ developer_telegram }}</a></footer>{% endif %}
