@@ -47,10 +47,13 @@
 </div>
 
 <div class="grid2 dashboard-bottom-grid">
-<section class="panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>
-<table class="responsive-table"><thead><tr><th>№</th><th>Заявка</th><th>Объект</th><th>Статус</th></tr></thead><tbody>
-{% for t in recent %}<tr><td data-label="№"><a href="/tickets/{{ t.id }}"><b>{{ t.number }}</b></a></td><td data-label="Заявка">{{ t.title }}</td><td data-label="Объект">{{ t.site.name }}</td><td data-label="Статус"><span class="badge s-{{t.status}}" style="{{badge_style('status',t.status)}}">{{ui_name('status',t.status,status_labels.get(t.status,t.status))}}</span></td></tr>{% else %}<tr><td class="empty-row" colspan="4">Заявок пока нет</td></tr>{% endfor %}
-</tbody></table></section>
+<section class="panel dashboard-recent-panel"><div class="panelhead"><h2>Последние заявки</h2><a href="/tickets">Все заявки</a></div>
+<div class="dashboard-recent-desktop"><table><thead><tr><th>№</th><th>Заявка</th><th>Объект</th><th>Статус</th></tr></thead><tbody>
+{% for t in recent %}<tr><td><a href="/tickets/{{ t.id }}"><b>{{ t.number }}</b></a></td><td>{{ t.title }}</td><td>{{ t.site.name }}</td><td><span class="badge s-{{t.status}}" style="{{badge_style('status',t.status)}}">{{ui_name('status',t.status,status_labels.get(t.status,t.status))}}</span></td></tr>{% else %}<tr><td class="empty-row" colspan="4">Заявок пока нет</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="dashboard-recent-mobile">
+{% for t in recent %}<a class="dashboard-recent-card" href="/tickets/{{t.id}}"><div class="dashboard-recent-top"><b>{{t.number}}</b><span class="badge s-{{t.status}}" style="{{badge_style('status',t.status)}}">{{ui_name('status',t.status,status_labels.get(t.status,t.status))}}</span></div><strong>{{t.title}}</strong><span>{{t.site.name}}</span></a>{% else %}<div class="dashboard-recent-empty">Заявок пока нет</div>{% endfor %}
+</div></section>
 <section class="panel"><div class="panelhead"><h2>Заявки по статусам</h2></div><div class="status-list compact-status-list">
 {% for status,count in by_status %}<div><span class="badge s-{{status}}" style="{{badge_style('status',status)}}">{{ui_name('status',status,status_labels.get(status,status))}}</span><b>{{ count }}</b></div>{% else %}<p>Нет данных</p>{% endfor %}
 </div></section>

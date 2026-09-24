@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v07614-svg-mobile';
+const CACHE = 'fmts-v07615-mobile-cards';
 const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));
