@@ -26,7 +26,7 @@ def _descendants(db:Session, item:MaintenanceChecklistItem)->list[MaintenanceChe
     return out
 
 @router.post('/maintenance/{plan_id}/checklist/items')
-def checklist_add(plan_id:int,request:Request,title:str=Form(...),parent_id:str=Form(''),instructions:str=Form(''),sort_order:int=Form(100),required:str=Form(''),db:Session=Depends(get_db)):
+def checklist_add(plan_id:int,request:Request,title:str=Form(...),parent_id:str=Form(''),instructions:str=Form(''),sort_order:int=Form(0),required:str=Form('1'),db:Session=Depends(get_db)):
     u=_user(request,db)
     if not u:return RedirectResponse('/login',303)
     if not has_permission(u,'maintenance.manage'):return forbidden(request,db,u,'maintenance.manage')
@@ -38,7 +38,13 @@ def checklist_add(plan_id:int,request:Request,title:str=Form(...),parent_id:str=
         if not parent or parent.plan_id!=plan.id: parent=None
     clean=title.strip()
     if clean:
-        row=MaintenanceChecklistItem(plan_id=plan.id,parent_id=parent.id if parent else None,title=clean,instructions=instructions.strip(),sort_order=sort_order,required=(required=='1'),active=True)
+        parent_key=parent.id if parent else None
+        if not sort_order or sort_order <= 0:
+            siblings=(db.query(MaintenanceChecklistItem)
+                      .filter(MaintenanceChecklistItem.plan_id==plan.id,MaintenanceChecklistItem.parent_id==parent_key,MaintenanceChecklistItem.active==True)
+                      .order_by(MaintenanceChecklistItem.sort_order.desc(),MaintenanceChecklistItem.id.desc()).all())
+            sort_order=(siblings[0].sort_order+10) if siblings else 10
+        row=MaintenanceChecklistItem(plan_id=plan.id,parent_id=parent_key,title=clean,instructions=instructions.strip(),sort_order=sort_order,required=(required=='1'),active=True)
         db.add(row);db.commit();db.refresh(row)
         audit(db,request,u,'maintenance.checklist.add',entity_type='maintenance',entity_id=plan.id,details=f'item={row.id}; title={clean}')
     return RedirectResponse(f'/maintenance#plan-{plan.id}',303)
@@ -58,6 +64,27 @@ def checklist_update(plan_id:int,item_id:int,request:Request,title:str=Form(...)
     if parent and parent.plan_id!=plan_id: parent=None
     item.title=title.strip() or item.title; item.instructions=instructions.strip(); item.sort_order=sort_order; item.required=(required=='1'); item.parent_id=parent.id if parent else None
     db.commit();audit(db,request,u,'maintenance.checklist.update',entity_type='maintenance',entity_id=plan_id,details=f'item={item.id}')
+    return RedirectResponse(f'/maintenance#plan-{plan_id}',303)
+
+@router.post('/maintenance/{plan_id}/checklist/{item_id}/move')
+def checklist_move(plan_id:int,item_id:int,request:Request,direction:str=Form(...),db:Session=Depends(get_db)):
+    u=_user(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'maintenance.manage'):return forbidden(request,db,u,'maintenance.manage')
+    item=db.get(MaintenanceChecklistItem,item_id)
+    if not item or item.plan_id!=plan_id:return RedirectResponse('/maintenance',303)
+    siblings=(db.query(MaintenanceChecklistItem)
+              .filter(MaintenanceChecklistItem.plan_id==plan_id,MaintenanceChecklistItem.parent_id==item.parent_id,MaintenanceChecklistItem.active==True)
+              .order_by(MaintenanceChecklistItem.sort_order,MaintenanceChecklistItem.id).all())
+    try: idx=next(i for i,x in enumerate(siblings) if x.id==item.id)
+    except StopIteration:return RedirectResponse(f'/maintenance#plan-{plan_id}',303)
+    target_idx=idx-1 if direction=='up' else idx+1 if direction=='down' else idx
+    if 0<=target_idx<len(siblings) and target_idx!=idx:
+        other=siblings[target_idx]
+        item.sort_order,other.sort_order=other.sort_order,item.sort_order
+        if item.sort_order==other.sort_order:
+            item.sort_order=target_idx*10+10; other.sort_order=idx*10+10
+        db.commit();audit(db,request,u,'maintenance.checklist.move',entity_type='maintenance',entity_id=plan_id,details=f'item={item.id}; direction={direction}')
     return RedirectResponse(f'/maintenance#plan-{plan_id}',303)
 
 @router.post('/maintenance/{plan_id}/checklist/{item_id}/delete')
