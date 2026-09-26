@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block anonymous %}
 <div class="login-page"><form class="login-card" method="post" action="/login">
-<div class="login-logo"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg></div><h1>FMTS</h1><p><b>Facility Management & Task System</b><br>Система задач и мониторинга работы хозяйственного отдела</p>
+<div class="login-logo app-login-mark"><img src="/static/icon-192.png" alt="FMTS"></div><h1>FMTS</h1><p><b>Facility Management & Task System</b><br>Система задач и мониторинга работы хозяйственного отдела</p>
 {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
 {% if next_url %}<input type="hidden" name="next_url" value="{{next_url}}">{% endif %}<label>Логин<input name="username" autocomplete="username" required></label>
 <label>Пароль<input type="password" name="password" autocomplete="current-password" required></label><label>Код 2FA <small class="muted">если включён</small><input name="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000"></label>

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "FMTS"
-    app_version: str = "8.0.1"
+    app_version: str = "8.0.3"
     developer_name: str = "Кирилл Вадимович Богунов"
     developer_telegram: str = "@kirill_bogunov"
     developer_url: str = "https://t.me/kirill_bogunov"
