@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_v801_version_and_cache():
     config = (ROOT / 'app/config.py').read_text(encoding='utf-8')
     sw = (ROOT / 'app/static/service-worker.js').read_text(encoding='utf-8')
-    assert 'app_version: str = "8.0.1"' in config
-    assert "fmts-v801-mobile-layout-system" in sw
+    assert 'app_version: str = "8.0.2"' in config
+    assert "fmts-v802-ticket-workspace-tabs" in sw
 
 
 def test_mobile_nav_is_docked_to_bottom():
@@ -21,7 +21,7 @@ def test_mobile_nav_is_docked_to_bottom():
 def test_ticket_action_dock_precedes_main_ticket_grid():
     html = (ROOT / 'app/templates/ticket_detail.html').read_text(encoding='utf-8')
     dock = html.index('<div class="ticket-action-dock"')
-    grid = html.index('<div class="grid2 wide-left ticket-grid">')
+    grid = html.index('<div class="grid2 wide-left ticket-grid ticket-tab-mode"')
     assert dock < grid
     css = (ROOT / 'app/static/app.css').read_text(encoding='utf-8')
     tail = css[css.index('FMTS v8.0.1 — unified mobile layout system'):]

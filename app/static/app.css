@@ -1085,3 +1085,67 @@ body.app-body{background:radial-gradient(circle at top left,#eef4ff 0,#f6f8fb 30
   .ticket-summary-mobile{grid-template-columns:1fr!important}
   .mobile-bottom-nav .mobile-nav-item small{font-size:7.6px!important}
 }
+
+/* FMTS 8.0.2 — ticket workspace tabs */
+.ticket-workspace-tabs{
+  position:sticky;top:12px;z-index:65;
+  display:flex;align-items:center;gap:7px;
+  width:100%;margin:0 0 10px;padding:7px;
+  border:1px solid #e1e8f1;border-radius:17px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 10px 28px rgba(15,23,42,.075);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  overflow-x:auto;scrollbar-width:none;
+}
+.ticket-workspace-tabs::-webkit-scrollbar{display:none}
+.ticket-workspace-tab{
+  appearance:none;border:0;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-width:0;min-height:42px;padding:9px 13px;
+  border-radius:12px;background:transparent;color:#617187;
+  font:inherit;font-size:11px;font-weight:850;white-space:nowrap;
+  transition:background .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.ticket-workspace-tab:hover{background:#f1f5f9;color:#1e3a5f;transform:translateY(-1px)}
+.ticket-workspace-tab.active{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 7px 16px rgba(37,99,235,.22)}
+.ticket-workspace-tab .ui-icon{width:17px;height:17px;flex:none}
+.ticket-workspace-tab>b{display:inline-grid;place-items:center;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#eef2f7;color:#52657a;font-size:9px;line-height:1}
+.ticket-workspace-tab.active>b{background:rgba(255,255,255,.2);color:#fff}
+.ticket-workspace-hint{display:flex;align-items:center;justify-content:center;margin:0 0 12px;padding:7px 10px;border-radius:11px;background:#f8fafc;color:#8a98aa;font-size:10px;border:1px solid #eef2f6}
+.ticket-grid.ticket-tab-mode{display:block!important}
+.ticket-grid.ticket-tab-mode>div{display:contents!important}
+.ticket-grid.ticket-tab-mode>[data-ticket-pane],.ticket-grid.ticket-tab-mode>div>[data-ticket-pane]{width:100%;margin-bottom:12px}
+.ticket-grid.ticket-tab-mode [data-ticket-pane][hidden]{display:none!important}
+.ticket-grid.ticket-tab-mode [data-ticket-pane].ticket-pane-active{animation:ticketPaneIn .18s ease both}
+@keyframes ticketPaneIn{from{opacity:.35;transform:translateY(5px)}to{opacity:1;transform:none}}
+.service-desk-jumps{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 14px;padding-bottom:12px;border-bottom:1px solid #edf2f7}
+.service-desk-jumps a{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:7px 10px;border:1px solid #e1e8f1;border-radius:11px;background:#f8fafc;color:#52657a;font-size:10.5px;font-weight:800;transition:.15s ease}
+.service-desk-jumps a:hover{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
+.service-desk-jumps .ui-icon{width:15px;height:15px}
+.service-desk-jumps b{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:999px;background:#e8eef6;color:#52657a;font-size:8.5px}
+#enterprise-ticket .enterprise-section{scroll-margin-top:90px}
+
+@media(max-width:780px){
+  .ticket-workspace-tabs{
+    top:calc(var(--mobile-topbar-total-h) + 6px)!important;
+    z-index:1080!important;
+    margin:0 0 10px!important;padding:5px!important;
+    border-radius:15px!important;gap:4px!important;
+    justify-content:flex-start!important;
+  }
+  .ticket-workspace-tab{min-height:40px!important;padding:7px 10px!important;border-radius:10px!important;font-size:9.5px!important;gap:5px!important;flex:0 0 auto!important}
+  .ticket-workspace-tab .ui-icon{width:15px!important;height:15px!important}
+  .ticket-workspace-tab>b{min-width:17px;height:17px;font-size:8px}
+  .ticket-workspace-hint{display:none!important}
+  .ticket-grid.ticket-tab-mode [data-ticket-pane]{scroll-margin-top:calc(var(--mobile-topbar-total-h) + 62px)!important}
+  #enterprise-ticket .enterprise-grid{grid-template-columns:1fr!important}
+  .service-desk-jumps{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;margin-top:10px!important}
+  .service-desk-jumps a{min-width:0!important;justify-content:flex-start!important;padding:8px 9px!important}
+  #enterprise-ticket .enterprise-section{scroll-margin-top:calc(var(--mobile-topbar-total-h) + 62px)!important}
+}
+
+@media(max-width:390px){
+  .ticket-workspace-tab{padding:7px 8px!important;font-size:9px!important}
+  .ticket-workspace-tab .ui-icon{width:14px!important;height:14px!important}
+  .service-desk-jumps{grid-template-columns:1fr 1fr!important}
+}
