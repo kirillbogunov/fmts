@@ -23,6 +23,20 @@
   {% if user.role != 'requester' %}<div class="time-summary-cell"><span>Время работ</span><b id="ticket-time-summary" data-base-seconds="{{work_time.total_seconds}}" data-running="{{'1' if active_session else '0'}}">{{work_time.total_label}}</b></div>{% endif %}
 </div>
 
+<div class="ticket-action-dock" aria-label="Быстрые действия по заявке">
+  {% if user.role == 'technician' %}
+    {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Маршрут</small></button>{% else %}<button type="button" disabled><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Нет адреса</small></button>{% endif %}
+    {% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')|replace('(','')|replace(')','')|replace('-','')}}"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#phone"></use></svg></span><small>Позвонить</small></a>{% endif %}
+    {% if active_session %}<form method="post" action="/tickets/{{ticket.id}}/time/stop"><button type="submit" class="dock-timer active"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#stop"></use></svg></span><small>Стоп</small></button></form>{% elif can_track %}<form method="post" action="/tickets/{{ticket.id}}/time/start"><button type="submit" class="dock-timer"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#play"></use></svg></span><small>Время</small></button></form>{% endif %}
+    <a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
+  {% elif user.role == 'requester' %}
+    <a href="/tickets"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#tickets"></use></svg></span><small>Мои заявки</small></a><a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
+  {% else %}
+    {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Маршрут</small></button>{% endif %}<a href="#ticket-control"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg></span><small>Управление</small></a><a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
+  {% endif %}
+</div>
+<div class="ticket-mobile-spacer"></div>
+
 <div class="grid2 wide-left ticket-grid">
 <div>
 <section class="panel"><h2>Описание</h2><p class="pre">{{ticket.description or 'Описание не указано'}}</p>
@@ -112,19 +126,7 @@
 
 </div></div>
 
-<div class="ticket-action-dock" aria-label="Быстрые действия по заявке">
-  {% if user.role == 'technician' %}
-    {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Маршрут</small></button>{% else %}<button type="button" disabled><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Нет адреса</small></button>{% endif %}
-    {% if ticket.requester_phone %}<a href="tel:{{ticket.requester_phone|replace(' ','')|replace('(','')|replace(')','')|replace('-','')}}"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#phone"></use></svg></span><small>Позвонить</small></a>{% endif %}
-    {% if active_session %}<form method="post" action="/tickets/{{ticket.id}}/time/stop"><button type="submit" class="dock-timer active"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#stop"></use></svg></span><small>Стоп</small></button></form>{% elif can_track %}<form method="post" action="/tickets/{{ticket.id}}/time/start"><button type="submit" class="dock-timer"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#play"></use></svg></span><small>Время</small></button></form>{% endif %}
-    <a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
-  {% elif user.role == 'requester' %}
-    <a href="/tickets"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#tickets"></use></svg></span><small>Мои заявки</small></a><a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
-  {% else %}
-    {% if ticket.site.address %}<button type="button" onclick='openRoutePicker({{ ticket.site.address|tojson }})'><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#map"></use></svg></span><small>Маршрут</small></button>{% endif %}<a href="#ticket-control"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg></span><small>Управление</small></a><a href="#ticket-comments"><span><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#edit"></use></svg></span><small>Комментарий</small></a>
-  {% endif %}
-</div>
-<div class="ticket-mobile-spacer"></div>
+
 
 {% if user.role in ['technician','dispatcher','manager','admin'] %}<div id="route-picker" class="route-picker" role="dialog" aria-modal="true" aria-labelledby="route-title" onclick="if(event.target===this) closeRoutePicker()"><div class="route-sheet"><div class="route-sheet-handle"></div><button class="route-close" type="button" aria-label="Закрыть" onclick="closeRoutePicker()"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#close"></use></svg></button><span class="location-kicker">МАРШРУТ</span><h2 id="route-title">Открыть навигатор</h2><p id="route-address" class="muted"></p><div class="route-apps"><a id="route-yandex" class="route-app" href="#" target="_blank" rel="noopener"><span>Я</span><b>Яндекс Карты</b><small>Маршрут от текущей позиции</small></a><a id="route-google" class="route-app" href="#" target="_blank" rel="noopener"><span>G</span><b>Google Maps</b><small>Маршрут до объекта</small></a><a id="route-2gis" class="route-app" href="#" target="_blank" rel="noopener"><span>2</span><b>2GIS</b><small>Найти объект по адресу</small></a></div></div></div>{% endif %}
 </div>

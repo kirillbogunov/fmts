@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_version_and_svg_sprite():
     config = (ROOT / 'app/config.py').read_text(encoding='utf-8')
-    assert ('0.7.6.' in config) or ('8.0.0' in config)
+    assert ('0.7.6.' in config) or ('8.0.' in config)
     icons = (ROOT / 'app/static/icons.svg').read_text(encoding='utf-8')
     for icon_id in ['menu','dashboard','tickets','bell','maintenance','settings','user','search','plus','map','camera']:
         assert f'id="{icon_id}"' in icons
@@ -34,5 +34,5 @@ def test_mobile_css_has_safe_layout_rules():
 
 def test_service_worker_caches_svg_sprite():
     sw = (ROOT / 'app/static/service-worker.js').read_text(encoding='utf-8')
-    assert ("const CACHE = 'fmts-v076" in sw) or ("const CACHE = 'fmts-v800" in sw)
+    assert ("const CACHE = 'fmts-v076" in sw) or ("const CACHE = 'fmts-v80" in sw)
     assert '/static/icons.svg' in sw

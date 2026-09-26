@@ -833,3 +833,255 @@ body.app-body{background:radial-gradient(circle at top left,#eef4ff 0,#f6f8fb 30
 @media(max-width:1180px){.report-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.report-analytics-grid{grid-template-columns:1fr}.report-donut-layout{grid-template-columns:minmax(190px,.6fr) minmax(0,1fr)}.report-subscription-panel{grid-template-columns:1fr}.report-subscription-form{grid-template-columns:1fr 1fr auto}}
 @media(max-width:780px){.report-v8-head{align-items:flex-start}.report-control-deck{grid-template-columns:1fr}.report-control-main{grid-template-columns:1fr 1fr}.report-control-main .btn{grid-column:1/-1}.report-scope-note{min-width:0}.report-analytics-grid{gap:12px}.report-chart-line{height:260px}.report-chart-bars{height:360px}.report-donut-layout{grid-template-columns:1fr}.report-chart-donut{height:220px}.report-chart-legend{grid-template-columns:1fr 1fr}.report-chart-center-note{right:14px;bottom:14px}.report-subscription-form{grid-template-columns:1fr}.report-subscription-form .btn{width:100%}.report-table-scroll{border:0;overflow:visible}.report-detail-table{min-width:0}.report-detail-table thead{display:none}.report-detail-table,.report-detail-table tbody,.report-detail-table tr,.report-detail-table td{display:block;width:100%}.report-detail-table tbody{display:grid;gap:10px}.report-detail-table tr{padding:13px 14px;border:1px solid #e6edf5;border-radius:16px;background:#fff}.report-detail-table td{display:grid;grid-template-columns:42% minmax(0,1fr);gap:10px;align-items:center;padding:7px 0;border:0;border-bottom:1px solid #f1f5f9}.report-detail-table td:last-child{border-bottom:0}.report-detail-table td:before{content:attr(data-label);font-size:10px;color:#94a3b8;font-weight:800}.report-progress-cell{min-width:0}.report-table-panel{background:transparent;border:0;box-shadow:none;padding:0}.report-table-panel>.panelhead{padding:0 2px 8px}}
 @media(max-width:520px){.report-kpi-grid{grid-template-columns:1fr 1fr;gap:8px}.report-kpi-card{grid-template-columns:36px minmax(0,1fr);padding:12px 10px;gap:9px;border-radius:15px}.report-kpi-icon,.report-kpi-ring{width:36px;height:36px;border-radius:11px}.report-kpi-icon .ui-icon{width:18px;height:18px}.report-kpi-ring:before{inset:5px}.report-kpi-card strong{font-size:19px}.report-kpi-card span{font-size:9.5px}.report-kpi-card small{font-size:9px}.report-control-main{grid-template-columns:1fr}.report-control-main .btn{grid-column:auto}.report-period-presets{gap:5px}.report-period-chip{padding:6px 8px;font-size:10px}.report-chart-card{padding:14px!important}.report-chart-line{height:230px}.report-chart-bars{height:340px}.report-chart-donut{height:205px}.report-chart-legend{grid-template-columns:1fr}.report-subscription-panel{padding:14px!important}.report-detail-table td{grid-template-columns:38% minmax(0,1fr)}}
+
+/* FMTS v8.0.1 — unified mobile layout system
+   Bottom navigation is docked to the physical bottom edge, all mobile pages
+   receive safe width/bottom spacing, and ticket controls no longer cover content. */
+@media (max-width:780px){
+  :root{
+    --mobile-topbar-content-h:58px;
+    --mobile-topbar-total-h:calc(var(--mobile-topbar-content-h) + env(safe-area-inset-top,0px));
+    --mobile-nav-content-h:64px;
+    --mobile-nav-total-h:calc(var(--mobile-nav-content-h) + env(safe-area-inset-bottom,0px));
+    --mobile-page-x:12px;
+    --mobile-card-radius:18px;
+  }
+
+  html,body{width:100%;max-width:100%;overflow-x:hidden!important}
+  body.app-body{
+    width:100%;
+    min-height:100dvh;
+    padding-top:var(--mobile-topbar-total-h)!important;
+    padding-bottom:0!important;
+    background:#f4f7fb!important;
+  }
+  .layout,.content,.content-inner,.ticket-page,.grid2,.grid3,.panel,.pagehead,
+  .form,.form-grid,.inline-form,.facts,.cards,.settings-grid,
+  .report-analytics-grid,.report-subscription-panel{
+    min-width:0!important;
+    max-width:100%!important;
+    box-sizing:border-box!important;
+  }
+  .content{
+    width:100%!important;
+    min-height:calc(100dvh - var(--mobile-topbar-total-h))!important;
+    padding:12px var(--mobile-page-x) calc(var(--mobile-nav-total-h) + 22px)!important;
+    overflow:visible!important;
+  }
+  .content-inner{width:100%!important;margin:0!important}
+  .app-footer{margin:18px 0 0!important;padding:14px 6px 8px!important}
+
+  /* Header always occupies its safe-area slot exactly. */
+  .mobile-topbar{
+    top:0!important;left:0!important;right:0!important;
+    width:100%!important;
+    height:var(--mobile-topbar-total-h)!important;
+    min-height:var(--mobile-topbar-total-h)!important;
+    padding:env(safe-area-inset-top,0px) max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px))!important;
+    display:grid!important;
+    grid-template-columns:44px minmax(0,1fr) 44px auto!important;
+    gap:8px!important;
+    align-items:center!important;
+    background:#101a2f!important;
+    box-shadow:0 1px 0 rgba(255,255,255,.04),0 8px 24px rgba(15,23,42,.10)!important;
+  }
+  .mobile-menu-btn,.mobile-topbar .install-mini{margin:0!important;align-self:center!important}
+  .mobile-brand{min-width:0!important;align-self:center!important;justify-content:center!important}
+  .mobile-brand b,.mobile-brand small{white-space:nowrap!important}
+  .mobile-topbar #installPwaTop{height:44px!important;min-height:44px!important;padding:0 14px!important;white-space:nowrap!important}
+
+  /* The main navigation is no longer a floating card. It is physically docked
+     to the bottom edge and includes the iPhone home-indicator safe area. */
+  .mobile-bottom-nav{
+    position:fixed!important;
+    z-index:1180!important;
+    left:0!important;right:0!important;bottom:0!important;
+    width:100%!important;
+    height:var(--mobile-nav-total-h)!important;
+    min-height:var(--mobile-nav-total-h)!important;
+    margin:0!important;
+    padding:5px max(8px,env(safe-area-inset-right,0px)) calc(5px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:3px!important;
+    border:0!important;
+    border-top:1px solid #dce5ef!important;
+    border-radius:18px 18px 0 0!important;
+    background:rgba(255,255,255,.98)!important;
+    box-shadow:0 -10px 30px rgba(15,23,42,.10)!important;
+    backdrop-filter:blur(22px)!important;
+    -webkit-backdrop-filter:blur(22px)!important;
+    overflow:visible!important;
+    box-sizing:border-box!important;
+  }
+  .mobile-bottom-nav .mobile-nav-item{
+    min-width:0!important;min-height:52px!important;height:52px!important;
+    padding:4px 2px!important;margin:0!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;
+    gap:2px!important;border-radius:13px!important;
+    color:#6b7b8f!important;background:transparent!important;box-shadow:none!important;
+    overflow:visible!important;
+  }
+  .mobile-bottom-nav .mobile-nav-item.active{background:#edf4ff!important;color:#1765dd!important}
+  .mobile-bottom-nav .mobile-nav-icon{
+    width:27px!important;height:27px!important;min-width:27px!important;
+    display:grid!important;place-items:center!important;
+    background:transparent!important;border-radius:9px!important;
+  }
+  .mobile-bottom-nav .mobile-nav-icon .ui-icon{width:21px!important;height:21px!important}
+  .mobile-bottom-nav .mobile-nav-item small{
+    display:block!important;max-width:100%!important;
+    font-size:8.8px!important;line-height:1.05!important;font-weight:800!important;
+    white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+  }
+  .mobile-bottom-nav .mobile-create{color:#1765dd!important;background:transparent!important}
+  .mobile-bottom-nav .mobile-create .mobile-create-icon{
+    width:34px!important;height:34px!important;min-width:34px!important;
+    margin:-4px 0 0!important;border-radius:11px!important;
+    background:linear-gradient(145deg,#2e74e9,#1765dd)!important;color:#fff!important;
+    box-shadow:0 5px 14px rgba(23,101,221,.24)!important;
+  }
+  .mobile-bottom-nav .mobile-create .mobile-create-icon .ui-icon{width:22px!important;height:22px!important}
+  .mobile-nav-badge{top:-3px!important;right:4px!important}
+
+  /* Global page rhythm. Nothing is allowed to be wider than the viewport. */
+  .pagehead{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;margin:0 0 12px!important}
+  .pagehead>div,.pagehead-actions,.panelhead>div{min-width:0!important}
+  .pagehead h1{font-size:28px!important;line-height:1.08!important;letter-spacing:-.035em!important;overflow-wrap:anywhere!important}
+  .pagehead p{max-width:100%!important;font-size:13px!important;line-height:1.5!important;overflow-wrap:anywhere!important}
+  .pagehead-actions{display:grid!important;grid-template-columns:1fr!important;width:100%!important}
+  .pagehead-actions .btn,.pagehead>.btn{width:100%!important}
+  .panel{
+    width:100%!important;
+    border-radius:var(--mobile-card-radius)!important;
+    padding:14px!important;
+    margin-bottom:12px!important;
+    box-shadow:0 7px 22px rgba(15,23,42,.045)!important;
+  }
+  .panelhead{display:flex!important;flex-wrap:wrap!important;align-items:flex-start!important;gap:8px!important}
+  .panelhead>*{min-width:0!important;max-width:100%!important}
+  .panelhead .btn{max-width:100%!important}
+  .grid2,.grid2.wide-left,.grid3,.settings-grid,.users-layout-modern,
+  .import-grid,.labor-team-grid,.kb-detail-grid,.inventory-donut-grid,
+  .report-analytics-grid,.report-subscription-panel{
+    grid-template-columns:1fr!important;
+  }
+
+  /* Form system. */
+  .form-grid,.user-form-grid-two,.service-form-grid,.automation-condition-grid,
+  .automation-action-grid,.ticket-form-grid,.labor-filters{
+    grid-template-columns:1fr!important;
+  }
+  input,select,textarea,button{max-width:100%!important;box-sizing:border-box!important}
+  input,select,textarea{min-width:0!important;width:100%}
+  .inline-form{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  .inline-form>*{width:100%!important;min-width:0!important}
+  .btn{white-space:normal!important;line-height:1.2!important}
+
+  /* Long values / facts are allowed to wrap instead of being cut off to the right. */
+  .pre{white-space:pre-wrap!important;overflow-wrap:anywhere!important;word-break:break-word!important;max-width:100%!important}
+  .facts,.facts.two{display:block!important;width:100%!important}
+  .facts>div,.facts.two>div{
+    display:grid!important;
+    grid-template-columns:minmax(112px,38%) minmax(0,1fr)!important;
+    align-items:start!important;
+    gap:12px!important;
+    width:100%!important;
+    min-width:0!important;
+    padding:12px 0!important;
+  }
+  .facts>div>span,.facts.two>div>span{min-width:0!important}
+  .facts>div>b,.facts.two>div>b{
+    min-width:0!important;max-width:none!important;width:auto!important;
+    text-align:right!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;word-break:normal!important;
+  }
+  .facts b a{overflow-wrap:anywhere!important}
+  .badge{max-width:100%!important;white-space:normal!important;word-break:normal!important;overflow-wrap:break-word!important;line-height:1.15!important}
+
+  /* Any legacy desktop table stays inside its own card instead of widening the page. */
+  .panel:has(table){max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch}
+  table{max-width:100%}
+
+  /* Ticket mobile cockpit. */
+  .ticket-page{width:100%!important;max-width:100%!important;padding-bottom:0!important;overflow:visible!important}
+  .ticket-head{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  .ticket-head h1{font-size:24px!important;line-height:1.15!important}
+  .ticket-head-badges{display:flex!important;flex-wrap:wrap!important;gap:6px!important;max-width:100%!important}
+  .ticket-location-card{width:100%!important;max-width:100%!important;overflow:hidden!important}
+  .location-main,.location-actions{min-width:0!important;max-width:100%!important}
+  .location-main p,.location-main small,.location-main strong{overflow-wrap:anywhere!important}
+  .ticket-summary-mobile{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .ticket-summary-mobile>div{min-width:0!important;padding:10px!important}
+  .ticket-summary-mobile>div:last-child{grid-column:auto!important}
+  .ticket-summary-mobile b,.ticket-summary-mobile small{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important}
+
+  /* Quick ticket actions now sit in normal document flow and stick under the
+     header. They never cover the checklist or the global bottom navigation. */
+  .ticket-action-dock{
+    display:grid!important;
+    grid-template-columns:repeat(auto-fit,minmax(78px,1fr))!important;
+    position:sticky!important;
+    top:calc(var(--mobile-topbar-total-h) + 8px)!important;
+    bottom:auto!important;left:auto!important;right:auto!important;
+    z-index:1070!important;
+    width:100%!important;max-width:100%!important;height:auto!important;
+    margin:0 0 12px!important;
+    padding:6px!important;
+    border:1px solid #dce6f2!important;
+    border-radius:16px!important;
+    background:rgba(255,255,255,.97)!important;
+    color:#52657c!important;
+    box-shadow:0 10px 26px rgba(15,23,42,.10)!important;
+    backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important;
+  }
+  .ticket-action-dock>form{display:contents!important}
+  .ticket-action-dock a,.ticket-action-dock button{
+    min-width:0!important;min-height:50px!important;padding:5px 4px!important;
+    border:0!important;border-radius:11px!important;background:transparent!important;
+    color:#52657c!important;
+    display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;
+  }
+  .ticket-action-dock a:active,.ticket-action-dock button:active{background:#edf4ff!important;color:#1765dd!important}
+  .ticket-action-dock .ui-icon{width:20px!important;height:20px!important}
+  .ticket-action-dock small{font-size:9px!important;line-height:1.05!important;font-weight:800!important;white-space:nowrap!important}
+  .ticket-mobile-spacer{display:none!important;height:0!important}
+
+  .maintenance-run-card{overflow:hidden!important}
+  .maintenance-run-head{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:start!important}
+  .maintenance-run-head>div:first-child{min-width:0!important}
+  .maintenance-run-head p{font-size:12px!important;line-height:1.45!important;overflow-wrap:anywhere!important}
+  .maintenance-check-item{max-width:100%!important;overflow:hidden!important;margin-left:min(calc(var(--depth) * 8px),24px)!important}
+  .maintenance-check-copy{min-width:0!important}.maintenance-check-copy b,.maintenance-check-copy small,.maintenance-check-copy em{overflow-wrap:anywhere!important}
+
+  /* Popovers/sheets clear the dock. */
+  .category-more-menu{bottom:calc(var(--mobile-nav-total-h) + 8px)!important}
+  .push-nudge{bottom:calc(var(--mobile-nav-total-h) + 10px)!important}
+  .route-sheet{padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))!important}
+
+  /* Avoid invisible end-of-page content behind the fixed navigation. */
+  .ticket-page,.dashboard-pro,.tickets-page,.maintenance-page,.profile-page,
+  .report-v8-page,.users-page,.category-page,.sla-page{
+    scroll-padding-bottom:calc(var(--mobile-nav-total-h) + 20px)!important;
+  }
+}
+
+@media (max-width:430px){
+  :root{--mobile-page-x:10px}
+  .pagehead h1{font-size:26px!important}
+  .panel{padding:12px!important;border-radius:16px!important}
+  .facts>div,.facts.two>div{grid-template-columns:minmax(96px,35%) minmax(0,1fr)!important;gap:9px!important}
+  .ticket-summary-mobile{grid-template-columns:1fr 1fr!important}
+  .ticket-action-dock{top:calc(var(--mobile-topbar-total-h) + 6px)!important}
+  .mobile-bottom-nav .mobile-nav-item small{font-size:8.2px!important}
+}
+
+@media (max-width:370px){
+  .mobile-topbar{grid-template-columns:40px minmax(0,1fr) 40px auto!important;padding-left:8px!important;padding-right:8px!important}
+  .mobile-topbar #installPwaTop{padding:0 10px!important;font-size:12px!important}
+  .mobile-brand b{font-size:14px!important}
+  .facts>div,.facts.two>div{grid-template-columns:1fr!important;gap:5px!important}
+  .facts>div>b,.facts.two>div>b{text-align:left!important}
+  .ticket-summary-mobile{grid-template-columns:1fr!important}
+  .mobile-bottom-nav .mobile-nav-item small{font-size:7.6px!important}
+}
