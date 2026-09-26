@@ -1,5 +1,5 @@
-const CACHE = 'fmts-v803-sidebar-branding';
-const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/manifest.webmanifest'];
+const CACHE = 'fmts-v804-centered-f-icon';
+const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/icon-maskable-192.png','/static/icon-maskable-512.png','/static/apple-touch-icon.png','/static/favicon-64.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));
   self.skipWaiting();
