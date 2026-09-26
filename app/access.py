@@ -195,7 +195,7 @@ def visible_navigation(user: User | None) -> dict[str, bool]:
         "settings": bool(user and has_permission(user, "settings.manage")),
         "audit": bool(user and has_permission(user, "audit.view")),
         "knowledge": bool(user and has_permission(user, "knowledge.view")),
-        "services": bool(user and has_permission(user, "service.view")),
+        "services": bool(user and user.role in {ROLE_DISPATCHER, ROLE_MANAGER, ROLE_ADMIN} and has_permission(user, "service.view")),
         "notifications": bool(user and has_permission(user, "notifications.view")),
         "reports": bool(user and has_permission(user, "report.builder")),
         "automation": bool(user and has_permission(user, "automation.manage")),

@@ -269,15 +269,94 @@ def services_page(request:Request,db:Session=Depends(get_db)):
     fields=db.query(CustomField).order_by(CustomField.service_id,CustomField.sort_order,CustomField.name).all()
     grouped=defaultdict(list)
     for f in fields: grouped[f.service_id].append(f)
-    return templates.TemplateResponse('services.html',ctx(request,db,rows=rows,fields_by_service=grouped,service_categories=category_options(db,'service'),sla_calendars=db.query(BusinessCalendar).filter(BusinessCalendar.active==True).order_by(BusinessCalendar.name).all()))
+    selected=None
+    raw_selected=(request.query_params.get('service') or '').strip()
+    if raw_selected.isdigit(): selected=db.get(ServiceCatalog,int(raw_selected))
+    if not selected and rows and request.query_params.get('new')!='1': selected=rows[0]
+    create_mode=request.query_params.get('new')=='1' or (not rows and has_permission(u,'service.manage'))
+    active_count=sum(1 for x in rows if x.active)
+    field_count=len(fields)
+    calendar_count=db.query(BusinessCalendar).filter(BusinessCalendar.active==True).count()
+    return templates.TemplateResponse('services.html',ctx(
+        request,db,rows=rows,selected=selected,create_mode=create_mode,
+        fields_by_service=grouped,service_categories=category_options(db,'service'),
+        sla_calendars=db.query(BusinessCalendar).filter(BusinessCalendar.active==True).order_by(BusinessCalendar.name).all(),
+        service_stats={'total':len(rows),'active':active_count,'fields':field_count,'calendars':calendar_count},
+    ))
+
+
+def _service_code(db:Session,requested:str='')->str:
+    code=(requested or '').strip().upper()[:80]
+    if code and not db.query(ServiceCatalog).filter(ServiceCatalog.code==code).first(): return code
+    n=(db.query(ServiceCatalog.id).order_by(ServiceCatalog.id.desc()).first() or (0,))[0] + 1
+    while True:
+        candidate=f'SRV-{n:03d}'
+        if not db.query(ServiceCatalog).filter(ServiceCatalog.code==candidate).first(): return candidate
+        n+=1
+
+
+def _positive_int(value:str):
+    try:
+        number=int(value)
+        return max(1,number) if number else None
+    except Exception:return None
+
 
 @router.post('/services/new')
-def service_new(request:Request,code:str=Form(...),name:str=Form(...),description:str=Form(''),category:str=Form('Другое'),default_priority:str=Form('normal'),default_sla_hours:str=Form(''),db:Session=Depends(get_db)):
+def service_new(request:Request,name:str=Form(...),description:str=Form(''),category:str=Form('Другое'),default_priority:str=Form('normal'),code:str=Form(''),business_calendar_id:str=Form(''),response_sla_minutes:str=Form(''),resolution_sla_minutes:str=Form(''),active:str=Form('1'),db:Session=Depends(get_db)):
     u=user_or_login(request,db)
     if not u:return RedirectResponse('/login',303)
     if not has_permission(u,'service.manage'): return forbidden(request,db,u,'service.manage')
-    row=ServiceCatalog(code=code.strip(),name=name.strip(),description=description,category=category,default_priority=default_priority,default_sla_hours=int(default_sla_hours) if default_sla_hours else None)
-    db.add(row);db.commit(); return RedirectResponse('/services',303)
+    response=_positive_int(response_sla_minutes); resolution=_positive_int(resolution_sla_minutes)
+    row=ServiceCatalog(
+        code=_service_code(db,code),name=name.strip(),description=description.strip(),category=category or 'Другое',
+        default_priority=default_priority or 'normal',default_sla_hours=max(1,int(round(resolution/60))) if resolution else None,
+        response_sla_minutes=response,resolution_sla_minutes=resolution,
+        business_calendar_id=int(business_calendar_id) if business_calendar_id.isdigit() else None,
+        active=active=='1',
+    )
+    db.add(row);db.commit();db.refresh(row)
+    audit(db,request,u,'service.create',entity_type='service',entity_id=row.id,details=row.name)
+    return RedirectResponse(f'/services?service={row.id}',303)
+
+
+@router.post('/services/{service_id}/update')
+def service_update(service_id:int,request:Request,name:str=Form(...),description:str=Form(''),category:str=Form('Другое'),default_priority:str=Form('normal'),code:str=Form(''),business_calendar_id:str=Form(''),response_sla_minutes:str=Form(''),resolution_sla_minutes:str=Form(''),active:str=Form(''),db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'service.manage'): return forbidden(request,db,u,'service.manage')
+    row=db.get(ServiceCatalog,service_id)
+    if not row:return RedirectResponse('/services',303)
+    requested=(code or '').strip().upper()[:80]
+    if requested and requested!=row.code:
+        exists=db.query(ServiceCatalog).filter(ServiceCatalog.code==requested,ServiceCatalog.id!=row.id).first()
+        if not exists: row.code=requested
+    response=_positive_int(response_sla_minutes); resolution=_positive_int(resolution_sla_minutes)
+    row.name=name.strip()[:180] or row.name
+    row.description=description.strip()
+    row.category=category or 'Другое'
+    row.default_priority=default_priority or 'normal'
+    row.business_calendar_id=int(business_calendar_id) if business_calendar_id.isdigit() else None
+    row.response_sla_minutes=response
+    row.resolution_sla_minutes=resolution
+    row.default_sla_hours=max(1,int(round(resolution/60))) if resolution else None
+    row.active=active=='1'
+    db.commit()
+    audit(db,request,u,'service.update',entity_type='service',entity_id=row.id,details=row.name)
+    return RedirectResponse(f'/services?service={row.id}',303)
+
+
+@router.post('/services/{service_id}/toggle')
+def service_toggle(service_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'service.manage'): return forbidden(request,db,u,'service.manage')
+    row=db.get(ServiceCatalog,service_id)
+    if row:
+        row.active=not row.active;db.commit()
+        audit(db,request,u,'service.toggle',entity_type='service',entity_id=row.id,details=f'active={row.active}')
+    return RedirectResponse(f'/services?service={service_id}',303)
+
 
 @router.post('/services/{service_id}/fields/new')
 def service_field_new(service_id:int,request:Request,code:str=Form(...),name:str=Form(...),field_type:str=Form('text'),options:str=Form(''),required:str=Form(''),db:Session=Depends(get_db)):
@@ -286,7 +365,20 @@ def service_field_new(service_id:int,request:Request,code:str=Form(...),name:str
     if not has_permission(u,'service.manage'): return forbidden(request,db,u,'service.manage')
     opts=[x.strip() for x in options.split('|') if x.strip()]
     db.add(CustomField(service_id=service_id,code=code.strip(),name=name.strip(),field_type=field_type,options_json=json.dumps(opts,ensure_ascii=False),required=bool(required)))
-    db.commit(); return RedirectResponse('/services',303)
+    db.commit(); return RedirectResponse(f'/services?service={service_id}#service-fields',303)
+
+
+@router.post('/services/{service_id}/fields/{field_id}/delete')
+def service_field_delete(service_id:int,field_id:int,request:Request,db:Session=Depends(get_db)):
+    u=user_or_login(request,db)
+    if not u:return RedirectResponse('/login',303)
+    if not has_permission(u,'service.manage'): return forbidden(request,db,u,'service.manage')
+    row=db.get(CustomField,field_id)
+    if row and row.service_id==service_id:
+        db.delete(row);db.commit()
+        audit(db,request,u,'service.field.delete',entity_type='custom_field',entity_id=field_id,details=f'service={service_id}')
+    return RedirectResponse(f'/services?service={service_id}#service-fields',303)
+
 
 # ---------- Automation ----------
 @router.get('/automation',response_class=HTMLResponse)
