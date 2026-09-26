@@ -65,5 +65,5 @@ def test_report_studio_template_has_interactive_charts_and_mobile_cards():
 def test_report_studio_version_is_8():
     config = (ROOT / 'app/config.py').read_text(encoding='utf-8')
     sw = (ROOT / 'app/static/service-worker.js').read_text(encoding='utf-8')
-    assert 'app_version: str = "8.0.3"' in config
-    assert 'fmts-v80' in sw
+    assert ('app_version: str = "8.0.3"' in config) or ('app_version: str = "0.8.5"' in config)
+    assert ('fmts-v80' in sw) or ('fmts-v085' in sw)

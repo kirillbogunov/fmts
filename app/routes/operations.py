@@ -214,8 +214,14 @@ def ticket_templates_page(request: Request, db: Session = Depends(get_db)):
         return forbidden(request, db, u, 'ticket.template')
     rows = db.query(TicketTemplate).order_by(TicketTemplate.active.desc(), TicketTemplate.name).all()
     tasks = {r.id: db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == r.id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id).all() for r in rows}
+    selected = None
+    raw_selected = request.query_params.get('template', '').strip()
+    if raw_selected.isdigit():
+        selected = next((row for row in rows if row.id == int(raw_selected)), None)
+    if not selected and rows and request.query_params.get('new') != '1':
+        selected = rows[0]
     return templates.TemplateResponse('ticket_templates.html', ctx(
-        request, db, rows=rows, tasks=tasks,
+        request, db, rows=rows, tasks=tasks, selected=selected,
         services=db.query(ServiceCatalog).filter(ServiceCatalog.active == True).order_by(ServiceCatalog.name).all(),
         groups=db.query(SupportGroup).filter(SupportGroup.active == True).order_by(SupportGroup.name).all(),
         sites=db.query(Site).order_by(Site.name).all(),
@@ -246,15 +252,121 @@ def ticket_template_new(
 
 
 @router.post('/ticket-templates/{template_id}/tasks')
-def ticket_template_task_new(template_id: int, request: Request, title: str = Form(...), description: str = Form(''), sort_order: int = Form(100), db: Session = Depends(get_db)):
+def ticket_template_task_new(template_id: int, request: Request, title: str = Form(...), description: str = Form(''), sort_order: int | None = Form(None), db: Session = Depends(get_db)):
     u = _user(request, db)
     if not u:
         return RedirectResponse('/login', 303)
     if not has_permission(u, 'ticket.template'):
         return forbidden(request, db, u, 'ticket.template')
     if db.get(TicketTemplate, template_id):
-        db.add(TicketTemplateTask(template_id=template_id, title=title.strip(), description=description, sort_order=sort_order)); db.commit()
-    return RedirectResponse('/ticket-templates', 303)
+        max_order = db.query(func.max(TicketTemplateTask.sort_order)).filter(TicketTemplateTask.template_id == template_id).scalar() or 0
+        effective_order = sort_order if sort_order is not None else max_order + 10
+        db.add(TicketTemplateTask(template_id=template_id, title=title.strip(), description=description.strip(), sort_order=effective_order)); db.commit()
+    return RedirectResponse(f'/ticket-templates?template={template_id}#work-orders', 303)
+
+
+@router.post('/ticket-templates/{template_id}/update')
+def ticket_template_update(
+    template_id: int, request: Request, name: str = Form(...), title_template: str = Form(''),
+    description_template: str = Form(''), category: str = Form('Другое'), priority: str = Form('normal'),
+    service_id: str = Form(''), group_id: str = Form(''), active: str = Form(''), db: Session = Depends(get_db),
+):
+    u = _user(request, db); tpl = db.get(TicketTemplate, template_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not tpl or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    clean = name.strip()
+    duplicate = db.query(TicketTemplate).filter(func.lower(TicketTemplate.name) == clean.lower(), TicketTemplate.id != template_id).first()
+    if clean and not duplicate:
+        tpl.name = clean
+        tpl.title_template = title_template.strip()
+        tpl.description_template = description_template.strip()
+        tpl.category = category.strip() or 'Другое'
+        tpl.priority = priority if priority in {'low','normal','high','critical'} else 'normal'
+        tpl.service_id = int(service_id) if service_id else None
+        tpl.group_id = int(group_id) if group_id else None
+        tpl.active = active == '1'
+        db.commit()
+        audit(db, request, u, 'ticket.template.update', entity_type='ticket_template', entity_id=tpl.id, details=tpl.name)
+    return RedirectResponse(f'/ticket-templates?template={template_id}', 303)
+
+
+@router.post('/ticket-templates/{template_id}/duplicate')
+def ticket_template_duplicate(template_id: int, request: Request, db: Session = Depends(get_db)):
+    u = _user(request, db); tpl = db.get(TicketTemplate, template_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not tpl or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    base = f'{tpl.name} — копия'; name = base; n = 2
+    while db.query(TicketTemplate).filter(func.lower(TicketTemplate.name) == name.lower()).first():
+        name = f'{base} {n}'; n += 1
+    clone = TicketTemplate(name=name, title_template=tpl.title_template, description_template=tpl.description_template,
+                           category=tpl.category, priority=tpl.priority, service_id=tpl.service_id, group_id=tpl.group_id, active=tpl.active)
+    db.add(clone); db.flush()
+    for task in db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == tpl.id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id):
+        db.add(TicketTemplateTask(template_id=clone.id, title=task.title, description=task.description, sort_order=task.sort_order))
+    db.commit()
+    audit(db, request, u, 'ticket.template.duplicate', entity_type='ticket_template', entity_id=clone.id, details=f'from={tpl.id}')
+    return RedirectResponse(f'/ticket-templates?template={clone.id}', 303)
+
+
+@router.post('/ticket-templates/{template_id}/tasks/{task_id}/update')
+def ticket_template_task_update(template_id: int, task_id: int, request: Request, title: str = Form(...), description: str = Form(''), db: Session = Depends(get_db)):
+    u = _user(request, db); task = db.get(TicketTemplateTask, task_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not task or task.template_id != template_id or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    task.title = title.strip(); task.description = description.strip(); db.commit()
+    return RedirectResponse(f'/ticket-templates?template={template_id}#work-orders', 303)
+
+
+@router.post('/ticket-templates/{template_id}/tasks/{task_id}/move')
+def ticket_template_task_move(template_id: int, task_id: int, request: Request, direction: str = Form(...), db: Session = Depends(get_db)):
+    u = _user(request, db); task = db.get(TicketTemplateTask, task_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not task or task.template_id != template_id or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    rows = db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == template_id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id).all()
+    idx = next((i for i, row in enumerate(rows) if row.id == task_id), -1)
+    other_idx = idx - 1 if direction == 'up' else idx + 1
+    if idx >= 0 and 0 <= other_idx < len(rows):
+        other = rows[other_idx]
+        task.sort_order, other.sort_order = other.sort_order, task.sort_order
+        if task.sort_order == other.sort_order:
+            task.sort_order = (other_idx + 1) * 10; other.sort_order = (idx + 1) * 10
+        db.commit()
+    return RedirectResponse(f'/ticket-templates?template={template_id}#work-orders', 303)
+
+
+@router.post('/ticket-templates/{template_id}/tasks/{task_id}/duplicate')
+def ticket_template_task_duplicate(template_id: int, task_id: int, request: Request, db: Session = Depends(get_db)):
+    u = _user(request, db); task = db.get(TicketTemplateTask, task_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not task or task.template_id != template_id or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    rows = db.query(TicketTemplateTask).filter(TicketTemplateTask.template_id == template_id).order_by(TicketTemplateTask.sort_order, TicketTemplateTask.id).all()
+    for i, row in enumerate(rows, start=1): row.sort_order = i * 20
+    db.flush()
+    task = db.get(TicketTemplateTask, task_id)
+    db.add(TicketTemplateTask(template_id=template_id, title=f'{task.title} — копия', description=task.description, sort_order=task.sort_order + 10))
+    db.commit()
+    return RedirectResponse(f'/ticket-templates?template={template_id}#work-orders', 303)
+
+
+@router.post('/ticket-templates/{template_id}/tasks/{task_id}/delete')
+def ticket_template_task_delete(template_id: int, task_id: int, request: Request, db: Session = Depends(get_db)):
+    u = _user(request, db); task = db.get(TicketTemplateTask, task_id)
+    if not u:
+        return RedirectResponse('/login', 303)
+    if not task or task.template_id != template_id or not has_permission(u, 'ticket.template'):
+        return forbidden(request, db, u, 'ticket.template')
+    db.delete(task); db.commit()
+    return RedirectResponse(f'/ticket-templates?template={template_id}#work-orders', 303)
 
 
 @router.post('/ticket-templates/{template_id}/instantiate')

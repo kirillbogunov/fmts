@@ -1,6 +1,216 @@
-{% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">SERVICE DESK / ППР</div><h1>Шаблоны заявок и наряды</h1><p>Один шаблон может создавать основную заявку и комплект дочерних работ</p></div></div>
-<div class="grid2 wide-left">
-<section class="panel"><div class="template-grid">{% for t in rows %}<article class="template-card"><div class="panelhead"><div><h3>{{t.name}}</h3><p class="muted">{{t.category}} · {{priority_labels.get(t.priority,t.priority)}}{% if t.group %} · {{t.group.name}}{% endif %}</p></div><span class="badge">{{tasks.get(t.id,[])|length}} наряд(ов)</span></div><p>{{t.description_template or 'Описание не задано'}}</p><div class="template-tasks">{% for x in tasks.get(t.id,[]) %}<div><span>{{loop.index}}</span><b>{{x.title}}</b><small>{{x.description}}</small></div>{% else %}<p class="muted">Дочерних нарядов нет.</p>{% endfor %}</div><details><summary>+ Добавить дочерний наряд</summary><form method="post" action="/ticket-templates/{{t.id}}/tasks" class="form compact"><label>Название<input name="title" required></label><label>Описание<input name="description"></label><label>Порядок<input type="number" name="sort_order" value="100"></label><button class="btn">Добавить</button></form></details><details><summary><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#play"></use></svg> Создать комплект заявок</summary><form method="post" action="/ticket-templates/{{t.id}}/instantiate" class="form compact"><label>Объект<select name="site_id" required><option value="">Выберите объект</option>{% for s in sites %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><label>Заявитель<select name="requester_id"><option value="">Текущий пользователь</option>{% for r in requesters %}<option value="{{r.id}}">{{r.full_name}}</option>{% endfor %}</select></label><label>Оборудование<select name="equipment_id"><option value="">Без оборудования</option>{% for e in equipment %}<option value="{{e.id}}">{{e.inventory_no}} — {{e.name}} / {{e.site.name}}</option>{% endfor %}</select></label><button class="btn primary">Создать комплект</button></form></details></article>{% else %}<p class="muted">Шаблонов пока нет.</p>{% endfor %}</div></section>
-<section class="panel"><h2>Новый шаблон</h2><form method="post" action="/ticket-templates/new" class="form"><label>Название<input name="name" required placeholder="Например: Ежемесячное ТО холодильной витрины"></label><label>Заголовок основной заявки<input name="title_template"></label><label>Описание<textarea name="description_template" rows="4"></textarea></label><label>Категория<input name="category" value="Другое"></label><label>Приоритет<select name="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option><option value="low">Низкий</option></select></label><label>Сервис<select name="service_id"><option value="">—</option>{% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label><label>Группа исполнителей<select name="group_id"><option value="">—</option>{% for g in groups %}<option value="{{g.id}}">{{g.name}}</option>{% endfor %}</select></label><button class="btn primary">Создать шаблон</button></form></section>
-</div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Шаблоны работ — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead template-pagehead">
+  <div>
+    <div class="eyebrow">SERVICE DESK / ТО / ППР</div>
+    <h1>Шаблоны работ</h1>
+    <p>Собирайте типовые заявки и комплекты работ один раз — FMTS будет создавать их без повторного заполнения.</p>
+  </div>
+  <div class="pagehead-actions">
+    <a class="btn primary" href="/ticket-templates?new=1#template-editor"><svg class="ui-icon icon-inline"><use href="/static/icons.svg#plus"></use></svg> Новый шаблон</a>
+  </div>
+</div>
+
+<section class="template-hero panel">
+  <div class="template-hero-copy">
+    <span class="template-kicker">Как это работает</span>
+    <h2>Шаблон = готовая заявка + набор связанных работ</h2>
+    <p>Укажите основные параметры, исполнителей и дочерние работы. Затем выберите объект — FMTS создаст весь комплект заявок автоматически.</p>
+  </div>
+  <div class="template-hero-steps">
+    <div><span>1</span><b>Настройте</b><small>заголовок, приоритет и сервис</small></div>
+    <div><span>2</span><b>Добавьте работы</b><small>любое количество нарядов</small></div>
+    <div><span>3</span><b>Запускайте</b><small>комплект для нужного объекта</small></div>
+  </div>
+</section>
+
+<div class="template-workspace">
+  <aside class="template-library panel">
+    <div class="template-library-head">
+      <div>
+        <span class="template-kicker">Библиотека</span>
+        <h2>Шаблоны</h2>
+      </div>
+      <span class="template-counter">{{ rows|length }}</span>
+    </div>
+    <div class="template-library-tools">
+      <div class="template-search">
+        <svg class="ui-icon"><use href="/static/icons.svg#search"></use></svg>
+        <input id="templateSearch" type="search" placeholder="Найти шаблон">
+      </div>
+      <select id="templateStatusFilter" aria-label="Фильтр по статусу">
+        <option value="all">Все</option>
+        <option value="active">Активные</option>
+        <option value="archived">Архивные</option>
+      </select>
+    </div>
+
+    <div class="template-list" id="templateList">
+      {% for t in rows %}
+      <a class="template-list-card {% if selected and selected.id == t.id %}selected{% endif %}" href="/ticket-templates?template={{t.id}}#template-editor" data-name="{{t.name|lower}} {{t.category|lower}} {% if t.group %}{{t.group.name|lower}}{% endif %}" data-status="{{ 'active' if t.active else 'archived' }}">
+        <div class="template-list-top">
+          <div class="template-list-icon"><svg class="ui-icon"><use href="/static/icons.svg#template"></use></svg></div>
+          <div class="template-list-title">
+            <b>{{t.name}}</b>
+            <small>{{t.title_template or 'Основная заявка'}}</small>
+          </div>
+          <span class="template-state {{ 'on' if t.active else 'off' }}">{{ 'Активен' if t.active else 'Архив' }}</span>
+        </div>
+        <div class="template-chip-row">
+          <span>{{t.category or 'Другое'}}</span>
+          <span class="priority-chip p-{{t.priority}}">{{priority_labels.get(t.priority,t.priority)}}</span>
+          {% if t.group %}<span>{{t.group.name}}</span>{% endif %}
+        </div>
+        <div class="template-card-foot">
+          <span><svg class="ui-icon icon-inline"><use href="/static/icons.svg#check"></use></svg>{{tasks.get(t.id,[])|length}} работ</span>
+          <span>Открыть <svg class="ui-icon icon-inline"><use href="/static/icons.svg#chevron-right"></use></svg></span>
+        </div>
+      </a>
+      {% else %}
+      <div class="template-empty-state">
+        <div class="template-empty-icon"><svg class="ui-icon"><use href="/static/icons.svg#template"></use></svg></div>
+        <h3>Шаблонов пока нет</h3>
+        <p>Создайте первый шаблон для регулярного ТО, стандартного ремонта или комплексной работы.</p>
+        <a class="btn primary" href="/ticket-templates?new=1#template-editor">Создать первый шаблон</a>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="template-no-results" id="templateNoResults" hidden>Ничего не найдено.</div>
+  </aside>
+
+  <main class="template-editor panel" id="template-editor">
+    {% if request.query_params.get('new') == '1' or not selected %}
+    <div class="template-editor-head">
+      <div>
+        <span class="template-kicker">Новый шаблон</span>
+        <h2>Создать шаблон работы</h2>
+        <p>Сначала сохраните основные параметры. После этого сможете добавить дочерние работы.</p>
+      </div>
+    </div>
+    <form method="post" action="/ticket-templates/new" class="template-form">
+      <section class="template-form-section">
+        <div class="template-section-title"><span>1</span><div><b>Основное</b><small>Как шаблон будет называться и что увидит заявитель</small></div></div>
+        <label>Название шаблона<input name="name" required placeholder="Например: Ежемесячное ТО холодильника"></label>
+        <label>Заголовок основной заявки<input name="title_template" placeholder="Например: Плановое ТО холодильного оборудования"></label>
+        <label>Описание<textarea name="description_template" rows="4" placeholder="Кратко опишите цель и общий объём работ"></textarea></label>
+      </section>
+      <section class="template-form-section">
+        <div class="template-section-title"><span>2</span><div><b>Параметры заявки</b><small>FMTS подставит их автоматически при запуске</small></div></div>
+        <div class="template-form-grid">
+          <label>Категория<input name="category" value="Другое" placeholder="Например: Холодильное оборудование"></label>
+          <label>Приоритет<select name="priority"><option value="normal">Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option><option value="low">Низкий</option></select></label>
+          <label>Сервис / SLA<select name="service_id"><option value="">Без отдельного сервиса</option>{% for s in services %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label>
+          <label>Группа исполнителей<select name="group_id"><option value="">Не назначать группу</option>{% for g in groups %}<option value="{{g.id}}">{{g.name}}</option>{% endfor %}</select></label>
+        </div>
+      </section>
+      <div class="template-form-actions"><button class="btn primary" type="submit"><svg class="ui-icon icon-inline"><use href="/static/icons.svg#check"></use></svg> Сохранить и добавить работы</button></div>
+    </form>
+    {% else %}
+    <div class="template-editor-head">
+      <div>
+        <span class="template-kicker">Редактирование</span>
+        <h2>{{selected.name}}</h2>
+        <p>{{tasks.get(selected.id,[])|length}} работ в комплекте{% if selected.service %} · SLA: {{selected.service.name}}{% endif %}</p>
+      </div>
+      <div class="template-editor-actions">
+        <form method="post" action="/ticket-templates/{{selected.id}}/duplicate"><button class="btn" type="submit"><svg class="ui-icon icon-inline"><use href="/static/icons.svg#duplicate"></use></svg> Дублировать</button></form>
+      </div>
+    </div>
+
+    <form method="post" action="/ticket-templates/{{selected.id}}/update" class="template-form">
+      <section class="template-form-section">
+        <div class="template-section-title"><span>1</span><div><b>Основное</b><small>Название и содержание основной заявки</small></div></div>
+        <label>Название шаблона<input name="name" required value="{{selected.name}}"></label>
+        <label>Заголовок основной заявки<input name="title_template" value="{{selected.title_template}}"></label>
+        <label>Описание<textarea name="description_template" rows="4">{{selected.description_template}}</textarea></label>
+      </section>
+
+      <section class="template-form-section">
+        <div class="template-section-title"><span>2</span><div><b>Параметры заявки</b><small>Категория, приоритет, SLA и ответственная команда</small></div></div>
+        <div class="template-form-grid">
+          <label>Категория<input name="category" value="{{selected.category}}"></label>
+          <label>Приоритет<select name="priority"><option value="normal" {% if selected.priority=='normal' %}selected{% endif %}>Обычный</option><option value="high" {% if selected.priority=='high' %}selected{% endif %}>Высокий</option><option value="critical" {% if selected.priority=='critical' %}selected{% endif %}>Срочный</option><option value="low" {% if selected.priority=='low' %}selected{% endif %}>Низкий</option></select></label>
+          <label>Сервис / SLA<select name="service_id"><option value="">Без отдельного сервиса</option>{% for s in services %}<option value="{{s.id}}" {% if selected.service_id==s.id %}selected{% endif %}>{{s.name}}</option>{% endfor %}</select></label>
+          <label>Группа исполнителей<select name="group_id"><option value="">Не назначать группу</option>{% for g in groups %}<option value="{{g.id}}" {% if selected.group_id==g.id %}selected{% endif %}>{{g.name}}</option>{% endfor %}</select></label>
+        </div>
+        <label class="template-toggle"><input type="checkbox" name="active" value="1" {% if selected.active %}checked{% endif %}><span></span><b>Шаблон активен</b><small>Архивный шаблон остаётся в истории, но не используется как рабочий.</small></label>
+      </section>
+      <div class="template-form-actions"><button class="btn primary" type="submit">Сохранить изменения</button></div>
+    </form>
+
+    <section class="template-form-section template-workorders" id="work-orders">
+      <div class="template-section-title"><span>3</span><div><b>Подзадачи / наряды</b><small>Работы будут созданы как связанные заявки вместе с основной</small></div></div>
+      <div class="workorder-list">
+        {% for x in tasks.get(selected.id,[]) %}
+        <article class="workorder-card">
+          <div class="workorder-number">{{loop.index}}</div>
+          <div class="workorder-copy">
+            <b>{{x.title}}</b>
+            <small>{{x.description or 'Без дополнительного описания'}}</small>
+          </div>
+          <div class="workorder-actions">
+            <form method="post" action="/ticket-templates/{{selected.id}}/tasks/{{x.id}}/move"><input type="hidden" name="direction" value="up"><button class="icon-btn" title="Поднять выше" {% if loop.first %}disabled{% endif %}><svg class="ui-icon"><use href="/static/icons.svg#arrow-up"></use></svg></button></form>
+            <form method="post" action="/ticket-templates/{{selected.id}}/tasks/{{x.id}}/move"><input type="hidden" name="direction" value="down"><button class="icon-btn" title="Опустить ниже" {% if loop.last %}disabled{% endif %}><svg class="ui-icon"><use href="/static/icons.svg#arrow-down"></use></svg></button></form>
+            <form method="post" action="/ticket-templates/{{selected.id}}/tasks/{{x.id}}/duplicate"><button class="icon-btn" title="Дублировать"><svg class="ui-icon"><use href="/static/icons.svg#duplicate"></use></svg></button></form>
+            <button class="icon-btn" type="button" title="Изменить" data-toggle-task="task-edit-{{x.id}}"><svg class="ui-icon"><use href="/static/icons.svg#edit"></use></svg></button>
+            <form method="post" action="/ticket-templates/{{selected.id}}/tasks/{{x.id}}/delete" onsubmit="return confirm('Удалить эту работу из шаблона?')"><button class="icon-btn danger" title="Удалить"><svg class="ui-icon"><use href="/static/icons.svg#trash"></use></svg></button></form>
+          </div>
+          <form id="task-edit-{{x.id}}" class="workorder-edit" method="post" action="/ticket-templates/{{selected.id}}/tasks/{{x.id}}/update" hidden>
+            <label>Название<input name="title" required value="{{x.title}}"></label>
+            <label>Описание<textarea name="description" rows="2">{{x.description}}</textarea></label>
+            <div><button class="btn" type="submit">Сохранить работу</button></div>
+          </form>
+        </article>
+        {% else %}
+        <div class="workorder-empty"><svg class="ui-icon"><use href="/static/icons.svg#check"></use></svg><div><b>Подзадач пока нет</b><small>Если работа простая, шаблон может создавать только одну основную заявку.</small></div></div>
+        {% endfor %}
+      </div>
+      <details class="template-add-work" {% if not tasks.get(selected.id,[]) %}open{% endif %}>
+        <summary><svg class="ui-icon icon-inline"><use href="/static/icons.svg#plus"></use></svg> Добавить работу</summary>
+        <form method="post" action="/ticket-templates/{{selected.id}}/tasks" class="template-inline-form">
+          <label>Название<input name="title" required placeholder="Например: Очистить конденсатор"></label>
+          <label>Описание<input name="description" placeholder="Необязательно"></label>
+          <button class="btn primary" type="submit">Добавить в комплект</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="template-form-section template-launch-section">
+      <div class="template-section-title"><span>4</span><div><b>Запустить шаблон</b><small>Создать основную заявку и весь комплект работ</small></div></div>
+      <form method="post" action="/ticket-templates/{{selected.id}}/instantiate" class="template-launch-form">
+        <label>Объект<select name="site_id" required><option value="">Выберите объект</option>{% for s in sites %}<option value="{{s.id}}">{{s.name}}</option>{% endfor %}</select></label>
+        <label>Оборудование<select name="equipment_id"><option value="">Без оборудования</option>{% for e in equipment %}<option value="{{e.id}}">{{e.inventory_no}} — {{e.name}} / {{e.site.name}}</option>{% endfor %}</select></label>
+        <label>Заявитель<select name="requester_id"><option value="">Текущий пользователь</option>{% for r in requesters %}<option value="{{r.id}}">{{r.full_name}}</option>{% endfor %}</select></label>
+        <button class="btn primary" type="submit"><svg class="ui-icon icon-inline"><use href="/static/icons.svg#play"></use></svg> Создать комплект заявок</button>
+      </form>
+    </section>
+    {% endif %}
+  </main>
+</div>
+
+<script>
+(() => {
+  const search=document.getElementById('templateSearch');
+  const status=document.getElementById('templateStatusFilter');
+  const list=document.getElementById('templateList');
+  const empty=document.getElementById('templateNoResults');
+  function filter(){
+    if(!list) return;
+    const q=(search?.value||'').trim().toLowerCase();
+    const s=status?.value||'all';
+    let shown=0;
+    list.querySelectorAll('.template-list-card').forEach(card=>{
+      const okText=!q || (card.dataset.name||'').includes(q);
+      const okStatus=s==='all' || card.dataset.status===s;
+      const show=okText&&okStatus; card.hidden=!show; if(show) shown++;
+    });
+    if(empty) empty.hidden=shown>0 || list.querySelectorAll('.template-list-card').length===0;
+  }
+  search?.addEventListener('input',filter); status?.addEventListener('change',filter);
+  document.querySelectorAll('[data-toggle-task]').forEach(btn=>btn.addEventListener('click',()=>{
+    const el=document.getElementById(btn.dataset.toggleTask); if(el) el.hidden=!el.hidden;
+  }));
+})();
+</script>
+{% endblock %}

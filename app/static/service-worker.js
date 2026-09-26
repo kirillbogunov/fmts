@@ -1,4 +1,4 @@
-const CACHE = 'fmts-v804-centered-f-icon';
+const CACHE = 'fmts-v085-template-workspace';
 const STATIC = ['/static/app.css','/static/icons.svg','/static/icon-192.png','/static/icon-512.png','/static/icon-maskable-192.png','/static/icon-maskable-512.png','/static/apple-touch-icon.png','/static/favicon-64.png','/static/manifest.webmanifest'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)));

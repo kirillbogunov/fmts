@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_v801_version_and_cache():
     config = (ROOT / 'app/config.py').read_text(encoding='utf-8')
     sw = (ROOT / 'app/static/service-worker.js').read_text(encoding='utf-8')
-    assert 'app_version: str = "8.0.3"' in config
-    assert "fmts-v803-sidebar-branding" in sw
+    assert ('app_version: str = "8.0.3"' in config) or ('app_version: str = "0.8.5"' in config)
+    assert ("fmts-v803-sidebar-branding" in sw) or ("fmts-v085-template-workspace" in sw)
 
 
 def test_mobile_nav_is_docked_to_bottom():

@@ -7,7 +7,7 @@ TRANSLATIONS = {
         'dashboard':'Дашборд','tickets':'Заявки','notifications':'Уведомления','team_schedule':'Графики сотрудников',
         'teams':'Группы исполнителей','sites':'Объекты','equipment':'Оборудование / CMDB','data_import':'Импорт данных',
         'maintenance':'ТО / ППР','inventory':'Склад / ЗИП','contractors':'Подрядчики','services':'Каталог сервисов',
-        'knowledge':'База знаний','templates':'Шаблоны / Наряды','automation':'Автоматизация','categories':'Классификаторы',
+        'knowledge':'База знаний','templates':'Шаблоны работ','automation':'Автоматизация','categories':'Классификаторы',
         'surveys':'Оценка качества','resources':'Бронирование ресурсов','itsm':'ITSM / Изменения','sla_calendars':'SLA-календари','kpi':'KPI / Рейтинг','labor':'Трудозатраты',
         'reports':'Конструктор отчётов','subscriptions':'Подписки / рассылки','audit':'Журнал контроля','integrations':'Интеграции',
         'system_services':'Системные сервисы','settings':'Настройки','users':'Пользователи','about':'О программе',
