@@ -1,5 +1,194 @@
-{% extends "base.html" %}{% block content %}
-<div class="pagehead"><div><div class="eyebrow">SERVICE CATALOG</div><h1>Каталог сервисов</h1><p>Типы услуг, SLA и собственные поля заявок без доработки кода.</p></div></div>
-<div class="service-grid">{% for s in rows %}<section class="panel service-card"><div class="panel-title-row"><div><h2>{{s.name}}</h2><p>{{s.description}}</p></div><span class="badge">{{s.default_priority}}{% if s.resolution_sla_minutes %} · решение {{s.resolution_sla_minutes}} мин{% elif s.default_sla_hours %} · {{s.default_sla_hours}} ч{% endif %}</span></div><p><b>Категория:</b> {{s.category}}</p><div class="service-sla-summary"><span>Реакция: <b>{{s.response_sla_minutes or "—"}}{% if s.response_sla_minutes %} мин{% endif %}</b></span><span>Решение: <b>{{s.resolution_sla_minutes or (s.default_sla_hours*60 if s.default_sla_hours else "—")}}{% if s.resolution_sla_minutes or s.default_sla_hours %} мин{% endif %}</b></span><span>Календарь: <b>{{s.business_calendar.name if s.business_calendar else "24/7 / fallback"}}</b></span></div><div class="custom-fields"><b>Поля формы</b>{% for f in fields_by_service.get(s.id,[]) %}<div class="field-chip">{{f.name}} · {{f.field_type}}{% if f.required %} *{% endif %}</div>{% else %}<span class="muted">Дополнительных полей нет</span>{% endfor %}</div>{% if can('sla.manage') %}<details><summary><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#settings"></use></svg> SLA сервиса</summary><form class="form compact" method="post" action="/services/{{s.id}}/sla"><label>Календарь<select name="business_calendar_id"><option value="">24/7 / без календаря</option>{% for c in sla_calendars %}<option value="{{c.id}}" {% if s.business_calendar_id==c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label><label>SLA реакции, минут<input type="number" min="1" name="response_sla_minutes" value="{{s.response_sla_minutes or ''}}"></label><label>SLA решения, минут<input type="number" min="1" name="resolution_sla_minutes" value="{{s.resolution_sla_minutes or (s.default_sla_hours*60 if s.default_sla_hours else '')}}"></label><button class="btn">Сохранить SLA</button></form></details>{% endif %}{% if user.role=='admin' %}<details><summary>+ Добавить поле</summary><form class="form compact" method="post" action="/services/{{s.id}}/fields/new"><label>Код<input name="code" required></label><label>Название<input name="name" required></label><label>Тип<select name="field_type"><option value="text">Текст</option><option value="number">Число</option><option value="date">Дата</option><option value="select">Список</option><option value="boolean">Да / Нет</option></select></label><label>Варианты списка <small>через |</small><input name="options"></label><label class="inline-check"><input type="checkbox" name="required" value="1"> обязательное</label><button class="btn">Добавить</button></form></details>{% endif %}</section>{% endfor %}</div>
-{% if user.role=='admin' %}<section class="panel"><h2>Новый сервис</h2><form class="form" method="post" action="/services/new"><div class="form-grid"><label>Код<input name="code" required></label><label>Название<input name="name" required></label><label>Категория{% if service_categories %}<select name="category"><option value="Другое">Другое</option>{% for c in service_categories %}<option value="{{c.code}}">{{c.name}}</option>{% endfor %}</select>{% else %}<input name="category" value="Другое">{% endif %}</label><label>Приоритет<select name="default_priority"><option value="low">Низкий</option><option value="normal" selected>Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option></select></label><label>SLA, часов<input type="number" min="1" name="default_sla_hours"></label></div><label>Описание<textarea name="description" rows="3"></textarea></label><button class="btn primary">Создать</button></form></section>{% endif %}
+{% extends "base.html" %}
+{% block title %}Каталог сервисов — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="pagehead service-pagehead">
+  <div>
+    <div class="eyebrow">НАСТРОЙКИ / SERVICE DESK</div>
+    <h1>Каталог сервисов</h1>
+    <p>Настройте типовые услуги один раз: категорию, приоритет, SLA, рабочий календарь и поля заявки. Дальше FMTS применяет эти правила автоматически.</p>
+  </div>
+  <div class="pagehead-actions">
+    {% if can('sla.manage') %}<a class="btn" href="/sla-calendars"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#calendar-clock"></use></svg> SLA-календари</a>{% endif %}
+    {% if can('service.manage') %}<a class="btn primary" href="/services?new=1#service-editor"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Новый сервис</a>{% endif %}
+  </div>
+</div>
+
+<section class="panel service-catalog-hero">
+  <div class="service-hero-copy">
+    <span class="service-kicker">Единые правила обслуживания</span>
+    <h2>Сервис — это готовая настройка для новой заявки</h2>
+    <p>Пользователь выбирает услугу, а FMTS уже знает нужную категорию, приоритет, SLA и набор дополнительных данных. Технические настройки спрятаны и не мешают основной работе.</p>
+  </div>
+  <div class="service-hero-stats">
+    <div><span>Сервисов</span><b>{{ service_stats.total }}</b><small>в каталоге</small></div>
+    <div><span>Активных</span><b>{{ service_stats.active }}</b><small>доступны в заявках</small></div>
+    <div><span>Полей</span><b>{{ service_stats.fields }}</b><small>дополнительных</small></div>
+    <div><span>SLA-календарей</span><b>{{ service_stats.calendars }}</b><small>рабочих графиков</small></div>
+  </div>
+</section>
+
+<div class="service-workspace">
+  <aside class="panel service-library">
+    <div class="service-library-head">
+      <div><h2>Сервисы</h2><p class="muted">Выберите сервис для просмотра или настройки.</p></div>
+      {% if can('service.manage') %}<a class="icon-btn service-new-icon" href="/services?new=1#service-editor" title="Новый сервис"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg></a>{% endif %}
+    </div>
+    <div class="service-library-tools">
+      <label class="service-search"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#search"></use></svg><input id="serviceSearch" type="search" placeholder="Найти сервис…" autocomplete="off"></label>
+      <div class="service-filter-tabs" role="group" aria-label="Фильтр сервисов">
+        <button type="button" class="active" data-service-filter="all">Все</button>
+        <button type="button" data-service-filter="active">Активные</button>
+        <button type="button" data-service-filter="inactive">Отключённые</button>
+      </div>
+    </div>
+    <div class="service-list" id="serviceList">
+      {% for s in rows %}
+      <a class="service-list-card {% if selected and selected.id==s.id %}selected{% endif %}" href="/services?service={{s.id}}#service-editor" data-name="{{(s.name ~ ' ' ~ s.category ~ ' ' ~ s.code)|lower}}" data-state="{% if s.active %}active{% else %}inactive{% endif %}">
+        <div class="service-list-top">
+          <span class="service-list-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#services"></use></svg></span>
+          <div class="service-list-title"><b>{{s.name}}</b><small>{{s.category or 'Без категории'}} · {{s.code}}</small></div>
+          <span class="service-state {% if s.active %}on{% else %}off{% endif %}">{% if s.active %}Активен{% else %}Отключён{% endif %}</span>
+        </div>
+        <div class="service-chip-row">
+          <span class="priority-{{s.default_priority}}">{% if s.default_priority=='critical' %}Срочный{% elif s.default_priority=='high' %}Высокий{% elif s.default_priority=='low' %}Низкий{% else %}Обычный{% endif %}</span>
+          <span>{% if s.business_calendar %}{{s.business_calendar.name}}{% else %}24/7{% endif %}</span>
+          <span>{{ fields_by_service.get(s.id,[])|length }} полей</span>
+        </div>
+        <div class="service-card-sla">
+          <span>Реакция <b>{% if s.response_sla_minutes %}{{s.response_sla_minutes}} мин{% else %}—{% endif %}</b></span>
+          <span>Решение <b>{% if s.resolution_sla_minutes %}{{s.resolution_sla_minutes}} мин{% elif s.default_sla_hours %}{{s.default_sla_hours}} ч{% else %}—{% endif %}</b></span>
+        </div>
+      </a>
+      {% else %}
+      <div class="service-empty-state"><div class="service-empty-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#services"></use></svg></div><h3>Каталог пока пуст</h3><p>Создайте первый сервис, чтобы FMTS автоматически подставлял параметры заявки.</p>{% if can('service.manage') %}<a class="btn primary" href="/services?new=1#service-editor">Создать сервис</a>{% endif %}</div>
+      {% endfor %}
+      <div class="service-no-results" id="serviceNoResults" hidden>По этому запросу сервисов нет.</div>
+    </div>
+  </aside>
+
+  <main class="panel service-editor" id="service-editor">
+    {% if create_mode and can('service.manage') %}
+      <div class="service-editor-head">
+        <div><span class="service-mode-badge">Новый сервис</span><h2>Создать услугу</h2><p>Заполните только основные параметры. Код и технические значения можно оставить FMTS.</p></div>
+        <a class="btn" href="/services">Отмена</a>
+      </div>
+      <form class="service-form" method="post" action="/services/new">
+        <section class="service-form-section">
+          <div class="service-section-title"><span>1</span><div><b>Основное</b><small>Как услуга будет называться и отображаться в заявке.</small></div></div>
+          <div class="service-form-grid">
+            <label class="span-2">Название сервиса<input name="name" required placeholder="Например: Ремонт холодильного оборудования"></label>
+            <label>Категория{% if service_categories %}<select name="category"><option value="Другое">Другое</option>{% for c in service_categories %}<option value="{{c.code}}">{{c.name}}</option>{% endfor %}</select>{% else %}<input name="category" value="Другое">{% endif %}</label>
+            <label>Приоритет по умолчанию<select name="default_priority"><option value="normal" selected>Обычный</option><option value="high">Высокий</option><option value="critical">Срочный</option><option value="low">Низкий</option></select></label>
+            <label class="span-2">Описание<textarea name="description" rows="3" placeholder="Когда выбирать этот сервис и что входит в обслуживание"></textarea></label>
+          </div>
+        </section>
+
+        <section class="service-form-section service-sla-block">
+          <div class="service-section-title"><span>2</span><div><b>SLA и рабочее время</b><small>Сроки считаются по выбранному рабочему календарю. Поле «SLA, часов» больше не нужно.</small></div></div>
+          <div class="service-sla-presets" data-sla-presets>
+            <button type="button" data-response="60" data-resolution="1440">Стандартный<small>1 ч / 24 ч</small></button>
+            <button type="button" data-response="30" data-resolution="240">Приоритетный<small>30 мин / 4 ч</small></button>
+            <button type="button" data-response="10" data-resolution="60">Аварийный<small>10 мин / 1 ч</small></button>
+          </div>
+          <div class="service-form-grid">
+            <label class="span-2">Рабочий календарь<select name="business_calendar_id"><option value="">24/7 — без рабочего календаря</option>{% for c in sla_calendars %}<option value="{{c.id}}">{{c.name}}</option>{% endfor %}</select></label>
+            <label>Реакция<input type="number" min="1" name="response_sla_minutes" placeholder="Например: 60"><small>Через сколько минут заявка должна быть принята в работу.</small></label>
+            <label>Решение<input type="number" min="1" name="resolution_sla_minutes" placeholder="Например: 1440"><small>Через сколько рабочих минут заявка должна быть решена.</small></label>
+          </div>
+        </section>
+
+        <section class="service-form-section">
+          <div class="service-section-title"><span>3</span><div><b>Исполнители и автоматизация</b><small>Назначение группы или техника настраивается отдельным правилом — без дублирования логики в каталоге.</small></div></div>
+          <div class="service-automation-card"><div class="service-automation-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#bolt"></use></svg></div><div><b>Автоназначение после создания сервиса</b><p>Создайте правило вида «Если сервис = этот → назначить группу/свободного техника».</p></div><a class="btn" href="/automation">Открыть автоматизацию</a></div>
+        </section>
+
+        <details class="service-advanced">
+          <summary>Дополнительные параметры</summary>
+          <div class="service-form-grid"><label>Внутренний код<input name="code" placeholder="Оставьте пустым — FMTS создаст автоматически"></label><label class="service-active-check"><input type="checkbox" name="active" value="1" checked><span>Сервис активен и доступен в заявках</span></label></div>
+        </details>
+        <div class="service-form-actions"><button class="btn primary" type="submit">Создать сервис</button></div>
+      </form>
+
+    {% elif selected %}
+      <div class="service-editor-head">
+        <div><span class="service-mode-badge {% if not selected.active %}inactive{% endif %}">{% if selected.active %}Активный сервис{% else %}Сервис отключён{% endif %}</span><h2>{{selected.name}}</h2><p>{{selected.description or 'Описание пока не заполнено.'}}</p></div>
+        {% if can('service.manage') %}<div class="service-editor-actions"><form method="post" action="/services/{{selected.id}}/toggle"><button class="btn" type="submit">{% if selected.active %}Отключить{% else %}Включить{% endif %}</button></form><a class="btn primary" href="/services?new=1#service-editor"><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Новый</a></div>{% endif %}
+      </div>
+
+      <div class="service-summary-grid">
+        <div><span>Категория</span><b>{{selected.category or 'Другое'}}</b></div>
+        <div><span>Приоритет</span><b>{% if selected.default_priority=='critical' %}Срочный{% elif selected.default_priority=='high' %}Высокий{% elif selected.default_priority=='low' %}Низкий{% else %}Обычный{% endif %}</b></div>
+        <div><span>SLA реакции</span><b>{% if selected.response_sla_minutes %}{{selected.response_sla_minutes}} мин{% else %}Не задан{% endif %}</b></div>
+        <div><span>SLA решения</span><b>{% if selected.resolution_sla_minutes %}{{selected.resolution_sla_minutes}} мин{% elif selected.default_sla_hours %}{{selected.default_sla_hours}} ч{% else %}Не задан{% endif %}</b></div>
+        <div><span>Календарь</span><b>{{selected.business_calendar.name if selected.business_calendar else '24/7'}}</b></div>
+        <div><span>Поля заявки</span><b>{{fields_by_service.get(selected.id,[])|length}}</b></div>
+      </div>
+
+      {% if can('service.manage') %}
+      <form class="service-form" method="post" action="/services/{{selected.id}}/update">
+        <section class="service-form-section">
+          <div class="service-section-title"><span>1</span><div><b>Основное</b><small>Название, категория и поведение сервиса по умолчанию.</small></div></div>
+          <div class="service-form-grid">
+            <label class="span-2">Название сервиса<input name="name" required value="{{selected.name}}"></label>
+            <label>Категория{% if service_categories %}<select name="category"><option value="{{selected.category}}">{{selected.category}}</option>{% for c in service_categories %}{% if c.code!=selected.category %}<option value="{{c.code}}">{{c.name}}</option>{% endif %}{% endfor %}</select>{% else %}<input name="category" value="{{selected.category}}">{% endif %}</label>
+            <label>Приоритет по умолчанию<select name="default_priority"><option value="normal" {% if selected.default_priority=='normal' %}selected{% endif %}>Обычный</option><option value="high" {% if selected.default_priority=='high' %}selected{% endif %}>Высокий</option><option value="critical" {% if selected.default_priority=='critical' %}selected{% endif %}>Срочный</option><option value="low" {% if selected.default_priority=='low' %}selected{% endif %}>Низкий</option></select></label>
+            <label class="span-2">Описание<textarea name="description" rows="3">{{selected.description}}</textarea></label>
+          </div>
+        </section>
+
+        <section class="service-form-section service-sla-block">
+          <div class="service-section-title"><span>2</span><div><b>SLA и рабочее время</b><small>FMTS считает сроки только внутри выбранного рабочего календаря.</small></div></div>
+          <div class="service-sla-presets" data-sla-presets><button type="button" data-response="60" data-resolution="1440">Стандартный<small>1 ч / 24 ч</small></button><button type="button" data-response="30" data-resolution="240">Приоритетный<small>30 мин / 4 ч</small></button><button type="button" data-response="10" data-resolution="60">Аварийный<small>10 мин / 1 ч</small></button></div>
+          <div class="service-form-grid">
+            <label class="span-2">Рабочий календарь<select name="business_calendar_id"><option value="">24/7 — без рабочего календаря</option>{% for c in sla_calendars %}<option value="{{c.id}}" {% if selected.business_calendar_id==c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label>
+            <label>Реакция<input type="number" min="1" name="response_sla_minutes" value="{{selected.response_sla_minutes or ''}}"><small>Рабочих минут до принятия заявки.</small></label>
+            <label>Решение<input type="number" min="1" name="resolution_sla_minutes" value="{{selected.resolution_sla_minutes or (selected.default_sla_hours*60 if selected.default_sla_hours else '')}}"><small>Рабочих минут до решения заявки.</small></label>
+          </div>
+        </section>
+
+        <section class="service-form-section">
+          <div class="service-section-title"><span>3</span><div><b>Исполнители и автоматизация</b><small>Маршрутизация остаётся в одном месте — в визуальных правилах автоматизации.</small></div></div>
+          <div class="service-automation-card"><div class="service-automation-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#team"></use></svg></div><div><b>Кто получает заявки этого сервиса?</b><p>Настройте группу, конкретного техника или выбор наименее загруженного сотрудника.</p></div><a class="btn" href="/automation">Настроить правило</a></div>
+        </section>
+
+        <details class="service-advanced">
+          <summary>Дополнительные параметры</summary>
+          <div class="service-form-grid"><label>Внутренний код<input name="code" value="{{selected.code}}"></label><label class="service-active-check"><input type="checkbox" name="active" value="1" {% if selected.active %}checked{% endif %}><span>Сервис активен и доступен в заявках</span></label></div>
+        </details>
+        <div class="service-form-actions"><button class="btn primary" type="submit">Сохранить изменения</button></div>
+      </form>
+      {% elif can('sla.manage') %}
+      <section class="service-form-section"><div class="service-section-title"><span>2</span><div><b>SLA сервиса</b><small>Вам доступно управление сроками и рабочим календарём.</small></div></div><form class="service-form" method="post" action="/services/{{selected.id}}/sla"><div class="service-form-grid"><label class="span-2">Рабочий календарь<select name="business_calendar_id"><option value="">24/7</option>{% for c in sla_calendars %}<option value="{{c.id}}" {% if selected.business_calendar_id==c.id %}selected{% endif %}>{{c.name}}</option>{% endfor %}</select></label><label>Реакция, минут<input type="number" min="1" name="response_sla_minutes" value="{{selected.response_sla_minutes or ''}}"></label><label>Решение, минут<input type="number" min="1" name="resolution_sla_minutes" value="{{selected.resolution_sla_minutes or ''}}"></label></div><button class="btn primary">Сохранить SLA</button></form></section>
+      {% endif %}
+
+      <section class="service-form-section" id="service-fields">
+        <div class="service-section-title"><span>4</span><div><b>Поля заявки</b><small>Дополнительные данные, которые пользователь заполняет только для этого сервиса.</small></div></div>
+        <div class="service-fields-list">
+          {% for f in fields_by_service.get(selected.id,[]) %}
+          <div class="service-field-card"><span class="service-field-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#file"></use></svg></span><div><b>{{f.name}}</b><small>{% if f.field_type=='text' %}Текст{% elif f.field_type=='number' %}Число{% elif f.field_type=='date' %}Дата{% elif f.field_type=='select' %}Список{% elif f.field_type=='boolean' %}Да / Нет{% else %}{{f.field_type}}{% endif %} · {{f.code}}{% if f.required %} · обязательное{% endif %}</small></div>{% if can('service.manage') %}<form method="post" action="/services/{{selected.id}}/fields/{{f.id}}/delete" onsubmit="return confirm('Удалить поле «{{f.name}}»?')"><button class="icon-btn danger" type="submit" title="Удалить"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#trash"></use></svg></button></form>{% endif %}</div>
+          {% else %}<div class="service-field-empty"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#file"></use></svg><div><b>Дополнительных полей нет</b><small>Обычная заявка уже содержит название, описание, объект, оборудование и контакты.</small></div></div>{% endfor %}
+        </div>
+        {% if can('service.manage') %}
+        <details class="service-add-field"><summary><svg class="ui-icon icon-inline" aria-hidden="true"><use href="/static/icons.svg#plus"></use></svg> Добавить поле</summary><form class="service-field-form" method="post" action="/services/{{selected.id}}/fields/new"><label>Название<input name="name" required placeholder="Например: Температура при осмотре"></label><label>Тип<select name="field_type"><option value="text">Текст</option><option value="number">Число</option><option value="date">Дата</option><option value="select">Список</option><option value="boolean">Да / Нет</option></select></label><label>Код<input name="code" required placeholder="temperature"></label><label>Варианты списка<input name="options" placeholder="Вариант 1 | Вариант 2"></label><label class="service-active-check"><input type="checkbox" name="required" value="1"><span>Обязательное поле</span></label><button class="btn primary" type="submit">Добавить поле</button></form></details>
+        {% endif %}
+      </section>
+
+    {% else %}
+      <div class="service-editor-empty"><div class="service-empty-icon"><svg class="ui-icon" aria-hidden="true"><use href="/static/icons.svg#services"></use></svg></div><h2>Выберите сервис</h2><p>Слева находится библиотека услуг. Выберите сервис, чтобы увидеть его правила и SLA.</p></div>
+    {% endif %}
+  </main>
+</div>
+
+<script>
+(function(){
+  const search=document.getElementById('serviceSearch');
+  const cards=[...document.querySelectorAll('.service-list-card')];
+  const empty=document.getElementById('serviceNoResults');
+  let state='all';
+  function apply(){const q=(search?.value||'').trim().toLowerCase();let count=0;cards.forEach(card=>{const okText=!q||(card.dataset.name||'').includes(q);const okState=state==='all'||card.dataset.state===state;const show=okText&&okState;card.hidden=!show;if(show)count++;});if(empty)empty.hidden=count!==0;}
+  if(search)search.addEventListener('input',apply);
+  document.querySelectorAll('[data-service-filter]').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('[data-service-filter]').forEach(x=>x.classList.remove('active'));btn.classList.add('active');state=btn.dataset.serviceFilter||'all';apply();}));
+  document.querySelectorAll('[data-sla-presets]').forEach(block=>block.querySelectorAll('button[data-response]').forEach(btn=>btn.addEventListener('click',()=>{const form=btn.closest('form');if(!form)return;const r=form.querySelector('[name="response_sla_minutes"]');const d=form.querySelector('[name="resolution_sla_minutes"]');if(r)r.value=btn.dataset.response||'';if(d)d.value=btn.dataset.resolution||'';block.querySelectorAll('button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');})));
+})();
+</script>
 {% endblock %}

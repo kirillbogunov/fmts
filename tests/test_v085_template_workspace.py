@@ -2,8 +2,8 @@ from pathlib import Path
 
 
 def test_v085_version_and_cache():
-    assert 'app_version: str = "0.8.5"' in Path('app/config.py').read_text(encoding='utf-8')
-    assert "fmts-v085-template-workspace" in Path('app/static/service-worker.js').read_text(encoding='utf-8')
+    assert 'app_version: str = "0.8.6"' in Path('app/config.py').read_text(encoding='utf-8')
+    assert "fmts-v086-service-catalog" in Path('app/static/service-worker.js').read_text(encoding='utf-8')
 
 
 def test_template_workspace_is_user_friendly():
